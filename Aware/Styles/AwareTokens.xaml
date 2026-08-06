@@ -1,0 +1,240 @@
+﻿<!--
+  The design tokens from docs/05-DESIGN-SYSTEM.md.
+
+  This is a plain root-level dictionary rather than a theme dictionary: custom
+  keys resolved from theme dictionaries fail silently inside DataTemplates on
+  Skia targets. Aware is a single-appearance app, so nothing is lost.
+
+  Skia colour equivalents live in Spatial/SpatialPalette.cs; the two must agree.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Palette -->
+  <Color x:Key="AwareCanvasNearColor">#F8F7F3</Color>
+  <Color x:Key="AwareCanvasFarColor">#DEDCD6</Color>
+  <Color x:Key="AwareModelFrontColor">#F1F0EC</Color>
+  <Color x:Key="AwareModelSideColor">#D8D7D1</Color>
+  <Color x:Key="AwareModelRearColor">#C4C3BD</Color>
+  <Color x:Key="AwareFloorColor">#D2D0C9</Color>
+  <Color x:Key="AwareInkColor">#191A17</Color>
+  <Color x:Key="AwareMutedColor">#75776F</Color>
+  <Color x:Key="AwareSelectionColor">#B7C2B1</Color>
+  <Color x:Key="AwareSelectionDarkColor">#6C7967</Color>
+  <Color x:Key="AwareBlueprintColor">#82939A</Color>
+
+  <SolidColorBrush x:Key="AwareCanvasNearBrush" Color="{StaticResource AwareCanvasNearColor}" />
+  <SolidColorBrush x:Key="AwareCanvasFarBrush" Color="{StaticResource AwareCanvasFarColor}" />
+  <SolidColorBrush x:Key="AwareModelFrontBrush" Color="{StaticResource AwareModelFrontColor}" />
+  <SolidColorBrush x:Key="AwareModelSideBrush" Color="{StaticResource AwareModelSideColor}" />
+  <SolidColorBrush x:Key="AwareModelRearBrush" Color="{StaticResource AwareModelRearColor}" />
+  <SolidColorBrush x:Key="AwareInkBrush" Color="{StaticResource AwareInkColor}" />
+  <SolidColorBrush x:Key="AwareMutedBrush" Color="{StaticResource AwareMutedColor}" />
+  <SolidColorBrush x:Key="AwareSelectionBrush" Color="{StaticResource AwareSelectionColor}" />
+  <SolidColorBrush x:Key="AwareSelectionDarkBrush" Color="{StaticResource AwareSelectionDarkColor}" />
+  <SolidColorBrush x:Key="AwareBlueprintBrush" Color="{StaticResource AwareBlueprintColor}" />
+
+  <SolidColorBrush x:Key="AwareSurfaceBrush" Color="#FBFBF8" Opacity="0.94" />
+  <SolidColorBrush x:Key="AwareScrimBrush" Color="#191A17" Opacity="0.42" />
+  <SolidColorBrush x:Key="AwareHairlineBrush" Color="{StaticResource AwareModelRearColor}" Opacity="0.7" />
+
+  <!--
+    Restrained serif for place and tray titles. Georgia resolves on Windows and
+    macOS; ship a bundled static instance before targeting Android or the web,
+    since variable fonts render their default instance on the Skia text stack.
+  -->
+  <FontFamily x:Key="AwareSerifFontFamily">Georgia</FontFamily>
+
+  <x:Double x:Key="AwarePlaceTitleSize">33</x:Double>
+  <x:Double x:Key="AwareTrayTitleSize">23</x:Double>
+  <x:Double x:Key="AwareBodySize">14.5</x:Double>
+  <x:Double x:Key="AwareLabelSize">12.5</x:Double>
+
+  <Thickness x:Key="AwareTrayPadding">18,16,18,18</Thickness>
+  <CornerRadius x:Key="AwareTrayRadius">27</CornerRadius>
+  <!-- Half the 44 px control height. An oversized value does not clamp per axis
+       on Skia targets; it renders the border as a full ellipse. -->
+  <CornerRadius x:Key="AwarePillRadius">22</CornerRadius>
+
+  <!-- Type -->
+  <Style x:Key="AwarePlaceTitleTextStyle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource AwareSerifFontFamily}" />
+    <Setter Property="FontSize" Value="{StaticResource AwarePlaceTitleSize}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareInkBrush}" />
+    <Setter Property="LineHeight" Value="38" />
+  </Style>
+
+  <Style x:Key="AwareTrayTitleTextStyle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource AwareSerifFontFamily}" />
+    <Setter Property="FontSize" Value="{StaticResource AwareTrayTitleSize}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareInkBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style x:Key="AwareEyebrowTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{StaticResource AwareLabelSize}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareMutedBrush}" />
+  </Style>
+
+  <Style x:Key="AwareBodyTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareInkBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="LineHeight" Value="21" />
+  </Style>
+
+  <Style x:Key="AwareSupportTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{StaticResource AwareLabelSize}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareMutedBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="LineHeight" Value="18" />
+  </Style>
+
+  <!--
+    Controls. Minimum target 44 x 44 (08-ACCESSIBILITY-TESTS).
+
+    Buttons carry their own template rather than Material's: 05-DESIGN-SYSTEM
+    calls for quiet pills with no elevation or ripple, and an explicit style over
+    the stock template would still inherit Material's pointer-over brushes.
+    Press scale is 0.98, the XAML house value.
+  -->
+  <ControlTemplate x:Key="AwareButtonTemplate" TargetType="Button">
+    <Border x:Name="Root"
+            Background="{TemplateBinding Background}"
+            BorderBrush="{TemplateBinding BorderBrush}"
+            BorderThickness="{TemplateBinding BorderThickness}"
+            CornerRadius="{TemplateBinding CornerRadius}"
+            Padding="{TemplateBinding Padding}"
+            RenderTransformOrigin="0.5,0.5">
+      <Border.RenderTransform>
+        <ScaleTransform x:Name="RootScale" ScaleX="1" ScaleY="1" />
+      </Border.RenderTransform>
+
+      <VisualStateManager.VisualStateGroups>
+        <VisualStateGroup x:Name="CommonStates">
+          <VisualState x:Name="Normal">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="RootScale" Storyboard.TargetProperty="ScaleX"
+                               To="1" Duration="0:0:0.12" />
+              <DoubleAnimation Storyboard.TargetName="RootScale" Storyboard.TargetProperty="ScaleY"
+                               To="1" Duration="0:0:0.12" />
+              <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity"
+                               To="1" Duration="0:0:0.12" />
+            </Storyboard>
+          </VisualState>
+
+          <VisualState x:Name="PointerOver">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity"
+                               To="0.9" Duration="0:0:0.12" />
+            </Storyboard>
+          </VisualState>
+
+          <VisualState x:Name="Pressed">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="RootScale" Storyboard.TargetProperty="ScaleX"
+                               To="0.98" Duration="0:0:0.09" />
+              <DoubleAnimation Storyboard.TargetName="RootScale" Storyboard.TargetProperty="ScaleY"
+                               To="0.98" Duration="0:0:0.09" />
+              <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity"
+                               To="0.84" Duration="0:0:0.09" />
+            </Storyboard>
+          </VisualState>
+
+          <VisualState x:Name="Disabled">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity"
+                               To="0.4" Duration="0" />
+            </Storyboard>
+          </VisualState>
+        </VisualStateGroup>
+      </VisualStateManager.VisualStateGroups>
+
+      <ContentPresenter x:Name="ContentPresenter"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        Foreground="{TemplateBinding Foreground}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+    </Border>
+  </ControlTemplate>
+
+  <Style x:Key="AwareTextBoxStyle" TargetType="TextBox">
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+  </Style>
+
+  <!-- Material sizes ComboBox at 56 px, towering over 44 px pills beside it. -->
+  <Style x:Key="AwareComboBoxStyle" TargetType="ComboBox">
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+  </Style>
+
+  <Style x:Key="AwareLensButtonStyle" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource AwareButtonTemplate}" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="MinWidth" Value="88" />
+    <Setter Property="Padding" Value="16,0" />
+    <Setter Property="CornerRadius" Value="{StaticResource AwarePillRadius}" />
+    <Setter Property="Background" Value="{StaticResource AwareSurfaceBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareMutedBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AwareHairlineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="AwarePrimaryButtonStyle" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource AwareButtonTemplate}" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="20,0" />
+    <Setter Property="CornerRadius" Value="{StaticResource AwarePillRadius}" />
+    <Setter Property="Background" Value="{StaticResource AwareInkBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AwareCanvasNearBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="AwareSecondaryButtonStyle" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource AwareButtonTemplate}" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="18,0" />
+    <Setter Property="CornerRadius" Value="{StaticResource AwarePillRadius}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource AwareInkBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AwareHairlineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontSize" Value="{StaticResource AwareBodySize}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="AwareQuietButtonStyle" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource AwareButtonTemplate}" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="MinWidth" Value="44" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="CornerRadius" Value="{StaticResource AwarePillRadius}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource AwareMutedBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="FontSize" Value="{StaticResource AwareLabelSize}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="AwareObjectRowButtonStyle" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource AwareButtonTemplate}" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="14,10" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+
+</ResourceDictionary>

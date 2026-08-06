@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "unoannotation": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "D:\\Matt\\Uno-Builds-net10\\unoAnnotation\\src\\UnoAnnotation.Server",
+        "--no-launch-profile",
+        "--",
+        "server",
+        "--mcp",
+        "--port",
+        "4848"
+      ]
+    },
+    "uno": {
+      "type": "http",
+      "url": "https://mcp.platform.uno/v1"
+    },
+    "uno-app": {
+      "command": "dotnet",
+      "args": [
+        "dnx",
+        "-y",
+        "uno.devserver",
+        "--mcp-app",
+        "--mcp-wait-tools-list"
+      ]
+    }
+  }
+}

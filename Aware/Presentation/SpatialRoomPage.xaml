@@ -1,0 +1,459 @@
+﻿<Page x:Class="Aware.Presentation.SpatialRoomPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:Aware.Presentation"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      NavigationCacheMode="Required"
+      Background="{StaticResource AwareCanvasFarBrush}">
+
+  <Page.Resources>
+    <local:LensActiveConverter x:Key="LensActive" />
+    <local:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    <local:NotEmptyToVisibilityConverter x:Key="NotEmptyToVisibility" />
+    <local:EvidenceGlyphConverter x:Key="EvidenceGlyph" />
+    <local:EvidenceNameConverter x:Key="EvidenceName" />
+    <local:PercentConverter x:Key="Percent" />
+    <local:EnumMatchToVisibilityConverter x:Key="EnumVisibility" />
+
+    <local:LensBrushConverter x:Key="LensBackground"
+                              ActiveKey="AwareSelectionBrush"
+                              InactiveKey="AwareSurfaceBrush" />
+    <local:LensBrushConverter x:Key="LensForeground"
+                              ActiveKey="AwareInkBrush"
+                              InactiveKey="AwareMutedBrush" />
+
+    <DataTemplate x:Key="TrayFactTemplate">
+      <Grid Margin="0,0,0,5"
+            ColumnSpacing="10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="112" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Evidence reads as a glyph plus a screen-reader word, never colour alone. -->
+        <TextBlock Text="{Binding Evidence, Converter={StaticResource EvidenceGlyph}}"
+                   AutomationProperties.Name="{Binding Evidence, Converter={StaticResource EvidenceName}}"
+                   ToolTipService.ToolTip="{Binding Evidence, Converter={StaticResource EvidenceName}}"
+                   FontSize="9"
+                   VerticalAlignment="Center"
+                   Foreground="{StaticResource AwareBlueprintBrush}" />
+
+        <TextBlock Grid.Column="1"
+                   Text="{Binding Label}"
+                   Style="{StaticResource AwareSupportTextStyle}" />
+
+        <TextBlock Grid.Column="2"
+                   Text="{Binding Value}"
+                   Style="{StaticResource AwareBodyTextStyle}"
+                   FontSize="13.5" />
+      </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ObjectRowTemplate">
+      <Button Style="{StaticResource AwareObjectRowButtonStyle}"
+              Command="{Binding DataContext.SelectFromListCommand, ElementName=Root}"
+              CommandParameter="{Binding}"
+              AutomationProperties.Name="{Binding AutomationName}">
+        <Grid ColumnSpacing="10">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Selection is marked by a filled rail and a weight change, so it
+               survives a greyscale or high-contrast rendering. -->
+          <Rectangle Width="4"
+                     RadiusX="2"
+                     RadiusY="2"
+                     Fill="{StaticResource AwareSelectionDarkBrush}"
+                     Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}" />
+
+          <StackPanel Grid.Column="1" Spacing="2">
+            <TextBlock Text="{Binding DisplayName}"
+                       Style="{StaticResource AwareBodyTextStyle}" />
+            <TextBlock Text="{Binding Detail}"
+                       Style="{StaticResource AwareSupportTextStyle}" />
+          </StackPanel>
+
+          <TextBlock Grid.Column="2"
+                     Text="{Binding ConfidenceLabel}"
+                     VerticalAlignment="Center"
+                     Style="{StaticResource AwareSupportTextStyle}" />
+        </Grid>
+      </Button>
+    </DataTemplate>
+  </Page.Resources>
+
+  <Grid x:Name="Root">
+
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="TrayStates">
+        <VisualState x:Name="TrayClosed">
+          <Storyboard>
+            <DoubleAnimationUsingKeyFrames
+              Storyboard.TargetName="TrayTransform"
+              Storyboard.TargetProperty="Y">
+              <SplineDoubleKeyFrame KeyTime="0:0:0.42" Value="420">
+                <SplineDoubleKeyFrame.KeySpline>
+                  <KeySpline ControlPoint1="0.18,0.82" ControlPoint2="0.22,1" />
+                </SplineDoubleKeyFrame.KeySpline>
+              </SplineDoubleKeyFrame>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimation Storyboard.TargetName="Tray"
+                             Storyboard.TargetProperty="Opacity"
+                             To="0"
+                             Duration="0:0:0.18" />
+          </Storyboard>
+        </VisualState>
+
+        <VisualState x:Name="TrayOpen">
+          <Storyboard>
+            <DoubleAnimationUsingKeyFrames
+              Storyboard.TargetName="TrayTransform"
+              Storyboard.TargetProperty="Y">
+              <SplineDoubleKeyFrame KeyTime="0:0:0.42" Value="0">
+                <SplineDoubleKeyFrame.KeySpline>
+                  <KeySpline ControlPoint1="0.18,0.82" ControlPoint2="0.22,1" />
+                </SplineDoubleKeyFrame.KeySpline>
+              </SplineDoubleKeyFrame>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimation Storyboard.TargetName="Tray"
+                             Storyboard.TargetProperty="Opacity"
+                             To="1"
+                             Duration="0:0:0.18" />
+          </Storyboard>
+        </VisualState>
+      </VisualStateGroup>
+
+      <VisualStateGroup x:Name="ObjectLabelStates">
+        <VisualState x:Name="ObjectLabelHidden">
+          <Storyboard>
+            <DoubleAnimation Storyboard.TargetName="ObjectLabel"
+                             Storyboard.TargetProperty="Opacity"
+                             To="0" Duration="0:0:0.18" />
+            <DoubleAnimation Storyboard.TargetName="ObjectLabelTransform"
+                             Storyboard.TargetProperty="Y"
+                             To="6" Duration="0:0:0.18" />
+          </Storyboard>
+        </VisualState>
+
+        <VisualState x:Name="ObjectLabelVisible">
+          <Storyboard>
+            <DoubleAnimation Storyboard.TargetName="ObjectLabel"
+                             Storyboard.TargetProperty="Opacity"
+                             To="1" Duration="0:0:0.18" />
+            <DoubleAnimation Storyboard.TargetName="ObjectLabelTransform"
+                             Storyboard.TargetProperty="Y"
+                             To="0" Duration="0:0:0.18" />
+          </Storyboard>
+        </VisualState>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+
+    <!-- 4. Model viewport, full bleed. The room is the interface. -->
+    <ContentControl x:Name="ViewportHost"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"
+                    AutomationProperties.Name="Spatial room model"
+                    AutomationProperties.HelpText="Drag to orbit. Tap an object to select it. Arrow keys orbit, Home resets the view." />
+
+    <Grid utu:SafeArea.Insets="VisibleBounds">
+
+      <!-- 2. Room title and confidence -->
+      <StackPanel Margin="20,20,20,0"
+                  VerticalAlignment="Top"
+                  Spacing="5"
+                  IsHitTestVisible="False">
+        <TextBlock Text="SPATIAL FINGERPRINT"
+                   Style="{StaticResource AwareEyebrowTextStyle}" />
+
+        <TextBlock Text="{Binding RoomName}"
+                   Style="{StaticResource AwarePlaceTitleTextStyle}" />
+
+        <TextBlock Text="{Binding RecognitionMessage}"
+                   Style="{StaticResource AwareSupportTextStyle}"
+                   AutomationProperties.LiveSetting="Polite" />
+
+        <ProgressBar Value="{Binding RecognitionProgress}"
+                     Maximum="1"
+                     Height="2"
+                     Margin="0,4,0,0"
+                     MaxWidth="180"
+                     HorizontalAlignment="Left"
+                     Foreground="{StaticResource AwareSelectionDarkBrush}"
+                     Background="{StaticResource AwareModelRearBrush}" />
+      </StackPanel>
+
+      <!-- Utility toggles -->
+      <StackPanel Margin="0,20,16,0"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Top"
+                  Orientation="Horizontal"
+                  Spacing="4">
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Objects"
+                Command="{Binding ToggleObjectListCommand}"
+                AutomationProperties.Name="Toggle the object list" />
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Motion"
+                Command="{Binding ToggleReducedMotionCommand}"
+                AutomationProperties.Name="Toggle reduced motion" />
+      </StackPanel>
+
+      <!-- 3. Lens selector -->
+      <Border Margin="20,152,20,0"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top"
+              Padding="4"
+              CornerRadius="{StaticResource AwarePillRadius}"
+              Background="{StaticResource AwareSurfaceBrush}"
+              BorderBrush="{StaticResource AwareHairlineBrush}"
+              BorderThickness="1">
+        <StackPanel Orientation="Horizontal" Spacing="2">
+          <Button Content="Explore"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Explore"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Explore}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Explore}" />
+          <Button Content="Measure"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Measure"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Measure}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Measure}" />
+          <Button Content="Memories"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Memories"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Memories}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Memories}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Accessible object list: the same selection, in a form a screen reader
+           and a keyboard can reach (08-ACCESSIBILITY-TESTS). -->
+      <Border Margin="0,152,16,90"
+              Width="300"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Stretch"
+              Padding="8"
+              CornerRadius="20"
+              Background="{StaticResource AwareSurfaceBrush}"
+              BorderBrush="{StaticResource AwareHairlineBrush}"
+              BorderThickness="1"
+              Visibility="{Binding IsObjectListVisible, Converter={StaticResource BoolToVisibility}}">
+        <Grid RowSpacing="4">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+
+          <TextBlock Margin="12,8,12,4"
+                     Text="OBJECTS IN THIS ROOM"
+                     Style="{StaticResource AwareEyebrowTextStyle}" />
+
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Objects}"
+                          ItemTemplate="{StaticResource ObjectRowTemplate}"
+                          AutomationProperties.Name="Objects in this room" />
+          </ScrollViewer>
+        </Grid>
+      </Border>
+
+      <!-- 5. Transient object label -->
+      <Border x:Name="ObjectLabel"
+              Margin="0,0,26,26"
+              HorizontalAlignment="Right"
+              Padding="14,8"
+              Opacity="0"
+              VerticalAlignment="Bottom"
+              CornerRadius="{StaticResource AwarePillRadius}"
+              Background="{StaticResource AwareSurfaceBrush}"
+              BorderBrush="{StaticResource AwareHairlineBrush}"
+              BorderThickness="1"
+              IsHitTestVisible="False">
+        <Border.RenderTransform>
+          <TranslateTransform x:Name="ObjectLabelTransform" Y="6" />
+        </Border.RenderTransform>
+        <TextBlock Text="{Binding SelectedObjectName}"
+                   Style="{StaticResource AwareBodyTextStyle}"
+                   FontSize="13" />
+      </Border>
+
+      <!-- 6. Compact bottom tray -->
+      <Border x:Name="Tray"
+              Margin="14"
+              Padding="{StaticResource AwareTrayPadding}"
+              Opacity="0"
+              MaxWidth="430"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Bottom"
+              CornerRadius="{StaticResource AwareTrayRadius}"
+              Background="{StaticResource AwareSurfaceBrush}"
+              BorderBrush="{StaticResource AwareHairlineBrush}"
+              BorderThickness="1">
+        <Border.RenderTransform>
+          <TranslateTransform x:Name="TrayTransform" Y="420" />
+        </Border.RenderTransform>
+
+        <Grid>
+          <!-- Actions mode -->
+          <StackPanel Spacing="2"
+                      Visibility="{Binding TrayMode, Converter={StaticResource EnumVisibility}, ConverterParameter=Actions}">
+            <Grid>
+              <StackPanel Spacing="3">
+                <TextBlock Text="{Binding ActionTray.Eyebrow}"
+                           Style="{StaticResource AwareEyebrowTextStyle}" />
+                <TextBlock Text="{Binding ActionTray.Title}"
+                           Style="{StaticResource AwareTrayTitleTextStyle}" />
+              </StackPanel>
+
+              <Button Style="{StaticResource AwareQuietButtonStyle}"
+                      Content="Close"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Top"
+                      Command="{Binding CloseTrayCommand}"
+                      AutomationProperties.Name="Close the object tray" />
+            </Grid>
+
+            <TextBlock Margin="0,3,0,0"
+                       Text="{Binding ActionTray.Description}"
+                       Style="{StaticResource AwareSupportTextStyle}" />
+
+            <ItemsControl Margin="0,11,0,3"
+                          ItemsSource="{Binding ActionTray.Facts}"
+                          ItemTemplate="{StaticResource TrayFactTemplate}" />
+
+            <Border Margin="0,2,0,9"
+                    Padding="12,8"
+                    CornerRadius="14"
+                    Background="{StaticResource AwareCanvasFarBrush}"
+                    Visibility="{Binding StatusMessage, Converter={StaticResource NotEmptyToVisibility}}">
+              <TextBlock Text="{Binding StatusMessage}"
+                         Style="{StaticResource AwareSupportTextStyle}"
+                         Foreground="{StaticResource AwareInkBrush}"
+                         AutomationProperties.LiveSetting="Assertive" />
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding ActionTray.Actions}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="8" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Content="{Binding Label}"
+                          Style="{StaticResource AwareSecondaryButtonStyle}"
+                          Command="{Binding DataContext.ExecuteActionCommand, ElementName=Root}"
+                          CommandParameter="{Binding Id}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Button Margin="-14,4,0,-6"
+                    Style="{StaticResource AwareQuietButtonStyle}"
+                    HorizontalAlignment="Left"
+                    Content="Not right? Correct this object"
+                    Command="{Binding BeginCorrectionCommand}" />
+          </StackPanel>
+
+          <!-- Correction mode -->
+          <StackPanel Spacing="10"
+                      Visibility="{Binding TrayMode, Converter={StaticResource EnumVisibility}, ConverterParameter=Correct}">
+            <TextBlock Text="CORRECT THIS OBJECT"
+                       Style="{StaticResource AwareEyebrowTextStyle}" />
+
+            <!-- Labels sit outside the controls: Material's Header is part of
+                 the control's own layout, so a fixed height squashes the field
+                 rather than the header. -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="Name" Style="{StaticResource AwareSupportTextStyle}" />
+              <TextBox Style="{StaticResource AwareTextBoxStyle}"
+                       AutomationProperties.Name="Object name"
+                       Text="{Binding CorrectionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <TextBlock Text="Object type" Style="{StaticResource AwareSupportTextStyle}" />
+              <ComboBox Style="{StaticResource AwareComboBoxStyle}"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Object type"
+                        ItemsSource="{Binding KnownClasses}"
+                        SelectedItem="{Binding CorrectionClass, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Save"
+                      Style="{StaticResource AwarePrimaryButtonStyle}"
+                      Command="{Binding SaveCorrectionCommand}" />
+              <Button Content="Cancel"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding CancelCorrectionCommand}" />
+            </StackPanel>
+
+            <Border Height="1" Background="{StaticResource AwareHairlineBrush}" Margin="0,4" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Exclude from suggestions"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding ToggleExclusionCommand}" />
+              <Button Content="Forget"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding ForgetObjectCommand}" />
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource AwareSupportTextStyle}"
+                       Text="Move to another room is unavailable: this device has one room model." />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- 1. First launch -->
+      <Grid Background="{StaticResource AwareScrimBrush}"
+            Visibility="{Binding ShowOnboarding, Converter={StaticResource BoolToVisibility}}">
+        <Border MaxWidth="440"
+                Margin="24"
+                Padding="26"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                CornerRadius="{StaticResource AwareTrayRadius}"
+                Background="{StaticResource AwareCanvasNearBrush}">
+          <StackPanel Spacing="12">
+            <TextBlock Text="AWARE"
+                       Style="{StaticResource AwareEyebrowTextStyle}" />
+
+            <TextBlock Text="{Binding OnboardingTitle}"
+                       Style="{StaticResource AwareTrayTitleTextStyle}" />
+
+            <TextBlock Text="{Binding OnboardingBody}"
+                       Style="{StaticResource AwareBodyTextStyle}" />
+
+            <TextBlock Text="{Binding CaptureCapability}"
+                       Style="{StaticResource AwareSupportTextStyle}" />
+
+            <StackPanel Margin="0,8,0,0"
+                        Orientation="Horizontal"
+                        Spacing="8">
+              <Button Content="{Binding OnboardingPrimaryLabel}"
+                      Style="{StaticResource AwarePrimaryButtonStyle}"
+                      Command="{Binding AdvanceOnboardingCommand}" />
+              <Button Content="Skip"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding SkipOnboardingCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+    </Grid>
+  </Grid>
+</Page>
