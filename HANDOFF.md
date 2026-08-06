@@ -36,27 +36,32 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 
 ## Next actions (in order)
 
-1. `git init` and commit. Nothing is under version control.
-2. Stand up `Aware.Tests` and automate `tests/TEST-CHECKLIST.md`. The projection, hit-testing
+1. Stand up `Aware.Tests` and automate `tests/TEST-CHECKLIST.md`. The projection, hit-testing
    and recognition cases are all pure functions of `Math3D`, `SpatialRoomRenderer.HitTest` and
    `RenderSnapshotFactory` — cheap to cover, and currently zero coverage.
-3. Run the other three TFMs. Android and WebAssembly have never been compiled here, and the
+2. Run the other three TFMs. Android and WebAssembly have never been compiled here, and the
    serif font resource (`Georgia`) will not resolve on either — bundle a static instance.
-4. Phase 2 capture: implement `ISpatialCaptureAdapter` for one real tier. The boundary and the
+3. Phase 2 capture: implement `ISpatialCaptureAdapter` for one real tier. The boundary and the
    simulation tier exist; nothing native sits behind them.
+
+## Decided this session (previously open)
+
+- **Eyebrow letterspacing: built.** `Presentation/TrackedText.cs` lays a string out one
+  `TextBlock` per character in a horizontal `StackPanel`. `TextBlock.CharacterSpacing` is a
+  silent no-op on the Uno Skia text stack. Word gaps use a fixed-width `Border`, not a space
+  character — a `TextBlock` holding only whitespace is trimmed to zero width, and U+00A0 does
+  not survive it either. The full string is the automation name; the per-character blocks are
+  `AccessibilityView.Raw` so a screen reader never spells it out.
+- **`samples/garage-room.json`: corrected.** Rewritten in its existing readable schema with
+  values measured off the geometry, all seven objects, opening dimensions and stages, plus a
+  header noting it is a summary and that the app persists the full graph elsewhere.
+- **Git: initialised**, `main`, Phase 1 committed.
 
 ## Open questions
 
-- The eyebrow labels ("SPATIAL FINGERPRINT") have no letterspacing.
-  `TextBlock.CharacterSpacing` is a silent no-op on the Uno Skia text stack, so the tracked
-  small-caps look in `05-DESIGN-SYSTEM.md` needs one `TextBlock` per character in a
-  `StackPanel` with `Spacing`. Worth it, or leave the eyebrows plain?
 - Tray placement diverges from the brief on wide viewports: it is bottom-**left** and capped at
   430 px so it never covers the selected object. The brief's reference viewport is 390 × 844,
   where it fills the width as specified. Confirm the desktop treatment.
-- `samples/garage-room.json` in the briefs is internally inconsistent (its `boundsCm` describe
-  a different workbench than its own primitives). Saved dimensions are derived from geometry
-  instead. Should the sample file be corrected to match, or is it only a schema example?
 
 ## Relaunch
 

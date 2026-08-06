@@ -168,8 +168,8 @@
                   VerticalAlignment="Top"
                   Spacing="5"
                   IsHitTestVisible="False">
-        <TextBlock Text="SPATIAL FINGERPRINT"
-                   Style="{StaticResource AwareEyebrowTextStyle}" />
+        <local:TrackedText Text="SPATIAL FINGERPRINT"
+                           TextStyle="{StaticResource AwareEyebrowTextStyle}" />
 
         <TextBlock Text="{Binding RoomName}"
                    Style="{StaticResource AwarePlaceTitleTextStyle}" />
@@ -256,9 +256,9 @@
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
-          <TextBlock Margin="12,8,12,4"
-                     Text="OBJECTS IN THIS ROOM"
-                     Style="{StaticResource AwareEyebrowTextStyle}" />
+          <local:TrackedText Margin="12,8,12,4"
+                             Text="OBJECTS IN THIS ROOM"
+                             TextStyle="{StaticResource AwareEyebrowTextStyle}" />
 
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Objects}"
@@ -310,8 +310,8 @@
                       Visibility="{Binding TrayMode, Converter={StaticResource EnumVisibility}, ConverterParameter=Actions}">
             <Grid>
               <StackPanel Spacing="3">
-                <TextBlock Text="{Binding ActionTray.Eyebrow}"
-                           Style="{StaticResource AwareEyebrowTextStyle}" />
+                <local:TrackedText Text="{Binding ActionTray.Eyebrow}"
+                                   TextStyle="{StaticResource AwareEyebrowTextStyle}" />
                 <TextBlock Text="{Binding ActionTray.Title}"
                            Style="{StaticResource AwareTrayTitleTextStyle}" />
               </StackPanel>
@@ -369,8 +369,8 @@
           <!-- Correction mode -->
           <StackPanel Spacing="10"
                       Visibility="{Binding TrayMode, Converter={StaticResource EnumVisibility}, ConverterParameter=Correct}">
-            <TextBlock Text="CORRECT THIS OBJECT"
-                       Style="{StaticResource AwareEyebrowTextStyle}" />
+            <local:TrackedText Text="CORRECT THIS OBJECT"
+                               TextStyle="{StaticResource AwareEyebrowTextStyle}" />
 
             <!-- Labels sit outside the controls: Material's Header is part of
                  the control's own layout, so a fixed height squashes the field
@@ -428,8 +428,9 @@
                 CornerRadius="{StaticResource AwareTrayRadius}"
                 Background="{StaticResource AwareCanvasNearBrush}">
           <StackPanel Spacing="12">
-            <TextBlock Text="AWARE"
-                       Style="{StaticResource AwareEyebrowTextStyle}" />
+            <local:TrackedText Text="AWARE"
+                               Tracking="3"
+                               TextStyle="{StaticResource AwareEyebrowTextStyle}" />
 
             <TextBlock Text="{Binding OnboardingTitle}"
                        Style="{StaticResource AwareTrayTitleTextStyle}" />
