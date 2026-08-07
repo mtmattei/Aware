@@ -39,11 +39,18 @@
   <SolidColorBrush x:Key="AwareHairlineBrush" Color="{StaticResource AwareModelRearColor}" Opacity="0.7" />
 
   <!--
-    Restrained serif for place and tray titles. Georgia resolves on Windows and
-    macOS; ship a bundled static instance before targeting Android or the web,
-    since variable fonts render their default instance on the Skia text stack.
+    Restrained serif for place and tray titles.
+
+    Bundled, not a system name: Georgia resolves on Windows and macOS and
+    nowhere else, so Android and the web would have silently fallen back to the
+    default sans. Gelasio is metrically compatible with Georgia, so shipping it
+    on every target changes the rendering on none of them.
+
+    It is a static instance, not a variable font: the Skia text stack renders a
+    variable font's default named instance and ignores FontWeight. The
+    #fragment must match the font's internal family name exactly.
   -->
-  <FontFamily x:Key="AwareSerifFontFamily">Georgia</FontFamily>
+  <FontFamily x:Key="AwareSerifFontFamily">ms-appx:///Assets/Fonts/Gelasio-Regular.ttf#Gelasio</FontFamily>
 
   <x:Double x:Key="AwarePlaceTitleSize">33</x:Double>
   <x:Double x:Key="AwareTrayTitleSize">23</x:Double>

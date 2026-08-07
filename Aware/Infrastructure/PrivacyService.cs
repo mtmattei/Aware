@@ -39,7 +39,7 @@ public sealed class PrivacyService : IPrivacyService
             if (File.Exists(_path))
             {
                 var json = await File.ReadAllTextAsync(_path, ct);
-                Current = JsonSerializer.Deserialize<PrivacySettings>(json, SpatialJson.Options) ?? Defaults;
+                Current = JsonSerializer.Deserialize(json, SpatialJsonContext.Default.PrivacySettings) ?? Defaults;
             }
         }
         catch (Exception ex)
@@ -54,7 +54,7 @@ public sealed class PrivacyService : IPrivacyService
     public async Task SaveAsync(PrivacySettings settings, CancellationToken ct)
     {
         Current = settings;
-        await File.WriteAllTextAsync(_path, JsonSerializer.Serialize(settings, SpatialJson.Options), ct);
+        await File.WriteAllTextAsync(_path, JsonSerializer.Serialize(settings, SpatialJsonContext.Default.PrivacySettings), ct);
     }
 
     public async Task ForgetAllSpatialDataAsync(CancellationToken ct)
@@ -75,7 +75,7 @@ public sealed class PrivacyService : IPrivacyService
 
         await File.WriteAllTextAsync(
             target,
-            JsonSerializer.Serialize(room, SpatialJson.ExportOptions),
+            JsonSerializer.Serialize(room, SpatialJsonExportContext.Default.SpatialRoom),
             ct);
 
         return target;

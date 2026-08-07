@@ -46,7 +46,7 @@ public sealed class JsonRoomRepository : IRoomRepository
             Directory.CreateDirectory(_root);
             await File.WriteAllTextAsync(
                 PathFor(room.Id),
-                JsonSerializer.Serialize(room, SpatialJson.Options),
+                JsonSerializer.Serialize(room, SpatialJsonContext.Default.SpatialRoom),
                 ct);
         }
         finally
@@ -104,7 +104,7 @@ public sealed class JsonRoomRepository : IRoomRepository
                     try
                     {
                         var json = await File.ReadAllTextAsync(file, ct);
-                        var room = JsonSerializer.Deserialize<SpatialRoom>(json, SpatialJson.Options);
+                        var room = JsonSerializer.Deserialize(json, SpatialJsonContext.Default.SpatialRoom);
                         if (room is not null) rooms[room.Id] = room;
                     }
                     catch (Exception ex)
@@ -123,7 +123,7 @@ public sealed class JsonRoomRepository : IRoomRepository
                 Directory.CreateDirectory(_root);
                 await File.WriteAllTextAsync(
                     PathFor(seeded.Id),
-                    JsonSerializer.Serialize(seeded, SpatialJson.Options),
+                    JsonSerializer.Serialize(seeded, SpatialJsonContext.Default.SpatialRoom),
                     ct);
             }
 

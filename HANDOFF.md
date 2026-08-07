@@ -18,8 +18,13 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 
 ## Last verified state
 
-- **Build:** pass. `net10.0-desktop`, Release, **0 warnings**. Uno.Sdk 6.6.42 / .NET 10.0.302.
-  Android/iOS/WASM TFMs are in the csproj but were not built or run.
+- **Build:** all four TFMs, **0 warnings / 0 errors**. Uno.Sdk 6.6.42 / .NET 10.0.302.
+  `net10.0-desktop` (Release), `net10.0-android`, `net10.0-ios`, `net10.0-browserwasm`.
+- **WebAssembly runtime: verified in Chrome.** `SKCanvasElement` renders the full model,
+  recognition and progressive assembly run, navigation resolves the `Room` route, hit testing
+  and the tray work, `LocalSettings` persists the onboarding flag across reloads, and the
+  bundled serif resolves. Android and iOS are **build-verified only** — no emulator or device
+  is available on this machine (`emulator -list-avds` is empty).
 - **Runtime:** verified by launching the Release exe and driving it with synthesized input,
   captured via `PrintWindow(PW_RENDERFULLCONTENT)`. Confirmed: progressive assembly
   (shell → furniture, message and geometry in step); orbit drag + inertia; keyboard orbit and
@@ -39,8 +44,10 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 1. Stand up `Aware.Tests` and automate `tests/TEST-CHECKLIST.md`. The projection, hit-testing
    and recognition cases are all pure functions of `Math3D`, `SpatialRoomRenderer.HitTest` and
    `RenderSnapshotFactory` — cheap to cover, and currently zero coverage.
-2. Run the other three TFMs. Android and WebAssembly have never been compiled here, and the
-   serif font resource (`Georgia`) will not resolve on either — bundle a static instance.
+2. Run Android on a device or emulator. It builds clean but has never executed, and it is the
+   target the 390 × 844 design reference was written for. Install an AVD first — there is none
+   on this machine. Watch for touch drag against the 7 px tap slop, which was tuned with a
+   mouse, and for `InputPane`/soft-keyboard behaviour in the correction sheet.
 3. Phase 2 capture: implement `ISpatialCaptureAdapter` for one real tier. The boundary and the
    simulation tier exist; nothing native sits behind them.
 
@@ -56,6 +63,24 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
   values measured off the geometry, all seven objects, opening dimensions and stages, plus a
   header noting it is a summary and that the app persists the full graph elsewhere.
 - **Git: initialised**, `main`, Phase 1 committed.
+
+## Cross-platform pass — what it caught
+
+Three real defects that desktop alone would never have surfaced:
+
+- **`System.Text.Json` reflection would have broken WebAssembly under trimming.** Six IL2026
+  warnings on the WASM build. Persistence worked in Debug and would have failed in a published
+  app. Now goes through source-generated `SpatialJsonContext` / `SpatialJsonExportContext`, and
+  the derived `Centroid` / `IsComplete` properties are `[JsonIgnore]`d so they stop being
+  written to disk.
+- **The serif was a system font name.** `Georgia` resolves on Windows and macOS and nowhere
+  else, so Android and the web fell back to the default sans silently. Now ships
+  `Assets/Fonts/Gelasio-Regular.ttf` — a true static TTF (magic `00 01 00 00`, internal family
+  `Gelasio`), metrically compatible with Georgia so nothing reflowed.
+- **Evidence markers rendered as tofu on WebAssembly.** They were geometric glyphs
+  (U+25CF / U+25CB); the Roboto that Material ships is latin-subset and has none. Now drawn as
+  a `Border` — filled circle, hollow circle, filled square — so they carry no font dependency
+  and still distinguish observed / inferred / corrected without relying on colour.
 
 ## Open questions
 

@@ -23,6 +23,7 @@ public enum EvidenceKind { Observed, Inferred, Corrected }
 /// </summary>
 public sealed record SpatialBounds(float? WidthCm, float? HeightCm, float? DepthCm)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsComplete => WidthCm is not null && HeightCm is not null && DepthCm is not null;
 
     public static SpatialBounds Unknown { get; } = new(null, null, null);
@@ -89,6 +90,7 @@ public sealed record SpatialObject(
     bool IsExcludedFromSuggestions = false)
 {
     /// <summary>World-space centre of every primitive, used to frame guides and labels.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public Vector3 Centroid
     {
         get

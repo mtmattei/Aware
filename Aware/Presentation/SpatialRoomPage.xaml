@@ -10,7 +10,8 @@
     <local:LensActiveConverter x:Key="LensActive" />
     <local:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <local:NotEmptyToVisibilityConverter x:Key="NotEmptyToVisibility" />
-    <local:EvidenceGlyphConverter x:Key="EvidenceGlyph" />
+    <local:EvidenceFillConverter x:Key="EvidenceFill" />
+    <local:EvidenceCornerRadiusConverter x:Key="EvidenceCorner" />
     <local:EvidenceNameConverter x:Key="EvidenceName" />
     <local:PercentConverter x:Key="Percent" />
     <local:EnumMatchToVisibilityConverter x:Key="EnumVisibility" />
@@ -31,13 +32,18 @@
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Evidence reads as a glyph plus a screen-reader word, never colour alone. -->
-        <TextBlock Text="{Binding Evidence, Converter={StaticResource EvidenceGlyph}}"
-                   AutomationProperties.Name="{Binding Evidence, Converter={StaticResource EvidenceName}}"
-                   ToolTipService.ToolTip="{Binding Evidence, Converter={StaticResource EvidenceName}}"
-                   FontSize="9"
-                   VerticalAlignment="Center"
-                   Foreground="{StaticResource AwareBlueprintBrush}" />
+        <!-- Evidence reads as a drawn shape plus a screen-reader word, never
+             colour alone. Drawn rather than typeset: the geometric glyphs this
+             used are absent from the latin-subset Roboto on WebAssembly. -->
+        <Border Width="9"
+                Height="9"
+                VerticalAlignment="Center"
+                Background="{Binding Evidence, Converter={StaticResource EvidenceFill}}"
+                BorderBrush="{StaticResource AwareBlueprintBrush}"
+                BorderThickness="1.2"
+                CornerRadius="{Binding Evidence, Converter={StaticResource EvidenceCorner}}"
+                AutomationProperties.Name="{Binding Evidence, Converter={StaticResource EvidenceName}}"
+                ToolTipService.ToolTip="{Binding Evidence, Converter={StaticResource EvidenceName}}" />
 
         <TextBlock Grid.Column="1"
                    Text="{Binding Label}"

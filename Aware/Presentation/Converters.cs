@@ -93,20 +93,33 @@ public sealed class NotEmptyToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
-/// Observed facts and inferred facts must be distinguishable without relying on
-/// colour (08-ACCESSIBILITY-TESTS), so evidence resolves to a glyph and a word.
+/// Observed, inferred and corrected facts must be distinguishable without
+/// relying on colour (08-ACCESSIBILITY-TESTS), so evidence resolves to a shape:
+/// a filled dot, a hollow dot, and a filled square.
+///
+/// <para>These were geometric glyphs (U+25CF / U+25CB) until WebAssembly showed
+/// them as tofu — the Roboto that Material ships is latin-subset and has no
+/// geometric shapes. Drawing the marker instead of typesetting it removes the
+/// dependency on any font's coverage.</para>
 /// </summary>
-public sealed class EvidenceGlyphConverter : IValueConverter
+public sealed class EvidenceFillConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, string language)
+    {
+        var filled = value is EvidenceKind.Observed or EvidenceKind.Corrected;
+        var key = filled ? "AwareBlueprintBrush" : "AwareCanvasNearBrush";
+        return Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(key, out var brush) ? brush : null;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>Round for observed and inferred, square for a correction the user made.</summary>
+public sealed class EvidenceCornerRadiusConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language) =>
-        value is EvidenceKind kind
-            ? kind switch
-            {
-                EvidenceKind.Observed => "●",   // filled dot
-                EvidenceKind.Corrected => "◆",  // diamond
-                _ => "○",                       // hollow dot
-            }
-            : string.Empty;
+        value is EvidenceKind.Corrected ? new CornerRadius(1) : new CornerRadius(5);
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>
         throw new NotSupportedException();
