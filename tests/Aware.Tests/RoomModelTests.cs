@@ -211,7 +211,7 @@ public class RoomModelTests
         var room = Room();
         var states = new List<RecognitionState>();
 
-        await foreach (var state in Recognizer(FakeFingerprints.None).RecognizeAsync(room, CancellationToken.None))
+        await foreach (var state in Recognizer(FakeFingerprints.None).RecognizeAsync(room, null, CancellationToken.None))
             states.Add(state);
 
         Assert.NotEmpty(states);
@@ -354,7 +354,7 @@ public class RoomModelTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var _ in recognizer.RecognizeAsync(Room(), cts.Token))
+            await foreach (var _ in recognizer.RecognizeAsync(Room(), null, cts.Token))
                 await cts.CancelAsync();
         });
     }
@@ -369,7 +369,7 @@ public class RoomModelTests
         SensorRoomRecognitionService recognizer, SpatialRoom room)
     {
         RecognitionState? last = null;
-        await foreach (var state in recognizer.RecognizeAsync(room, CancellationToken.None))
+        await foreach (var state in recognizer.RecognizeAsync(room, null, CancellationToken.None))
             last = state;
 
         return last ?? throw new InvalidOperationException("Recognition produced no state.");

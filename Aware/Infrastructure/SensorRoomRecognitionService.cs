@@ -47,13 +47,14 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
 
     public async IAsyncEnumerable<RecognitionState> RecognizeAsync(
         SpatialRoom room,
+        FingerprintReading? known,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var scale = _motion.ReducedMotion ? .12f : 1f;
 
         // Sensing starts immediately and runs alongside the shell assembling, so
         // the reading is ready by the time the stages need its verdict.
-        var reading = ReadAsync(ct);
+        var reading = known is null ? ReadAsync(ct) : Task.FromResult(known);
 
         await Task.Delay(TimeSpan.FromMilliseconds(800 * scale), ct);
         yield return new RecognitionState(

@@ -46,6 +46,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     services.AddSingleton<IRoomRepository, JsonRoomRepository>();
                     services.AddSingleton<IRoomRecognitionService, SensorRoomRecognitionService>();
                     services.AddSingleton<IFingerprintMatcher, FingerprintMatcher>();
+                    services.AddSingleton<IRoomLocator, RoomLocator>();
                     services.AddSingleton<IRenderSnapshotFactory, RenderSnapshotFactory>();
                     services.AddSingleton<IObjectActionResolver, ObjectActionResolver>();
                     services.AddSingleton<IPrivacyService, PrivacyService>();

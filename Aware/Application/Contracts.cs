@@ -20,8 +20,15 @@ public sealed record RecognitionState(
 
 public interface IRoomRecognitionService
 {
+    /// <param name="known">
+    /// A reading already taken this launch, reused rather than re-sensed. Two
+    /// readings seconds apart can disagree, so a room located by the first could
+    /// fail to recognize itself against a second — and each read waits on three
+    /// sensors in turn, so sensing twice is also seconds of startup.
+    /// </param>
     IAsyncEnumerable<RecognitionState> RecognizeAsync(
         SpatialRoom room,
+        FingerprintReading? known,
         CancellationToken ct);
 
     /// <summary>

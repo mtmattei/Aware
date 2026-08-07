@@ -22,6 +22,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     private readonly IRoomRepository _rooms;
     private readonly IRoomRecognitionService _recognition;
     private readonly IFingerprintMatcher _matcher;
+    private readonly IRoomLocator _locator;
     private readonly IRenderSnapshotFactory _snapshots;
     private readonly IObjectActionResolver _actions;
     private readonly ISpatialCaptureAdapter _capture;
@@ -84,6 +85,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         IRoomRepository rooms,
         IRoomRecognitionService recognition,
         IFingerprintMatcher matcher,
+        IRoomLocator locator,
         IRenderSnapshotFactory snapshots,
         IObjectActionResolver actions,
         ISpatialCaptureAdapter capture,
@@ -96,6 +98,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         _rooms = rooms;
         _recognition = recognition;
         _matcher = matcher;
+        _locator = locator;
         _snapshots = snapshots;
         _actions = actions;
         _capture = capture;
@@ -178,8 +181,18 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
         ShowOnboarding = !HasSeenOnboarding();
 
-        _room = await _rooms.GetRoomAsync(SampleGarageFactoryId, ct)
-                ?? (await _rooms.GetRoomsAsync(ct)).FirstOrDefault();
+        // Seeding still runs, so the sample exists on a fresh install.
+        var seeded = await _rooms.GetRoomAsync(SampleGarageFactoryId, ct);
+        var rooms = await _rooms.GetRoomsAsync(ct);
+
+        // Which room opens is the whole point: take one reading and let the place
+        // the device is standing in choose, rather than always opening the sample.
+        // The reading is reused by recognition below — sensing twice seconds apart
+        // can disagree, and the room that was located would fail to recognize itself.
+        var reading = await ReadPlaceAsync(ct);
+        var located = reading is null ? null : _locator.Locate(rooms, reading);
+
+        _room = located?.Room ?? seeded ?? rooms.FirstOrDefault();
 
         if (_room is null)
         {
@@ -191,7 +204,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         RebuildObjectList();
         Refresh();
 
-        await foreach (var state in _recognition.RecognizeAsync(_room, ct))
+        await foreach (var state in _recognition.RecognizeAsync(_room, reading, ct))
         {
             RecognitionMessage = state.Message;
             RecognitionProgress = state.Progress;
@@ -291,7 +304,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         RebuildObjectList();
         Refresh();
 
-        await foreach (var state in _recognition.RecognizeAsync(room, ct))
+        await foreach (var state in _recognition.RecognizeAsync(room, _recognition.LastReading, ct))
         {
             RecognitionMessage = state.Message;
             RecognitionProgress = state.Progress;
@@ -328,6 +341,30 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     }
 
     private static RoomId SampleGarageFactoryId => new("room-garage-001");
+
+    /// <summary>
+    /// One reading for the whole launch. Failure degrades to "no sensors" rather
+    /// than taking startup down, matching SensorRoomRecognitionService.
+    /// </summary>
+    private async Task<FingerprintReading?> ReadPlaceAsync(CancellationToken ct)
+    {
+        if (!_fingerprints.IsAvailable) return null;
+
+        try
+        {
+            var reading = await _fingerprints.ReadAsync(ct);
+            return reading.HasAnySignal ? reading : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not read the place while choosing a room.");
+            return null;
+        }
+    }
 
     // ------------------------------------------------------------------
     // Lens and selection
