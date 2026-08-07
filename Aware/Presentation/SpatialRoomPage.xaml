@@ -177,6 +177,10 @@
            drag starting over the title still orbits the model. The outer panel
            only exists to stack the Link button under it and carries no Background,
            which leaves it transparent to pointer events. -->
+      <!-- The whole top-left column flows in one stack. The lens selector used to
+           carry a hardcoded Margin.Top of 152, which silently assumed the title
+           block's exact height — the Link button appearing above it rendered
+           underneath the pills. -->
       <StackPanel Margin="20,20,20,0"
                   VerticalAlignment="Top"
                   HorizontalAlignment="Left"
@@ -212,6 +216,41 @@
                 Visibility="{Binding CanLinkPlace, Converter={StaticResource BoolToVisibility}}"
                 AutomationProperties.Name="Link this room to the place you are in"
                 AutomationProperties.HelpText="Stores the ambient signals around you so Aware can recognize this room later." />
+
+        <!-- 3. Lens selector. Flows under the title block and, when shown,
+             the Link button — no absolute offset to keep in sync. -->
+        <Border Margin="0,24,0,0"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top"
+              Padding="4"
+              CornerRadius="{StaticResource AwarePillRadius}"
+              Background="{StaticResource AwareSurfaceBrush}"
+              BorderBrush="{StaticResource AwareHairlineBrush}"
+              BorderThickness="1">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <Button Content="Explore"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Explore"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Explore}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Explore}" />
+            <Button Content="Measure"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Measure"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Measure}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Measure}" />
+            <Button Content="Memories"
+                  Style="{StaticResource AwareLensButtonStyle}"
+                  BorderThickness="0"
+                  Command="{Binding SetLensCommand}"
+                  CommandParameter="Memories"
+                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Memories}"
+                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Memories}" />
+          </StackPanel>
+        </Border>
       </StackPanel>
 
       <!-- Utility toggles -->
@@ -230,39 +269,6 @@
                 AutomationProperties.Name="Toggle reduced motion" />
       </StackPanel>
 
-      <!-- 3. Lens selector -->
-      <Border Margin="20,152,20,0"
-              HorizontalAlignment="Left"
-              VerticalAlignment="Top"
-              Padding="4"
-              CornerRadius="{StaticResource AwarePillRadius}"
-              Background="{StaticResource AwareSurfaceBrush}"
-              BorderBrush="{StaticResource AwareHairlineBrush}"
-              BorderThickness="1">
-        <StackPanel Orientation="Horizontal" Spacing="2">
-          <Button Content="Explore"
-                  Style="{StaticResource AwareLensButtonStyle}"
-                  BorderThickness="0"
-                  Command="{Binding SetLensCommand}"
-                  CommandParameter="Explore"
-                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Explore}"
-                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Explore}" />
-          <Button Content="Measure"
-                  Style="{StaticResource AwareLensButtonStyle}"
-                  BorderThickness="0"
-                  Command="{Binding SetLensCommand}"
-                  CommandParameter="Measure"
-                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Measure}"
-                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Measure}" />
-          <Button Content="Memories"
-                  Style="{StaticResource AwareLensButtonStyle}"
-                  BorderThickness="0"
-                  Command="{Binding SetLensCommand}"
-                  CommandParameter="Memories"
-                  Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Memories}"
-                  Foreground="{Binding ActiveLens, Converter={StaticResource LensForeground}, ConverterParameter=Memories}" />
-        </StackPanel>
-      </Border>
 
       <!-- Accessible object list: the same selection, in a form a screen reader
            and a keyboard can reach (08-ACCESSIBILITY-TESTS). -->

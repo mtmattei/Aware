@@ -49,6 +49,7 @@
     <Compile Include="..\..\Aware\Infrastructure\SensorRoomRecognitionService.cs" Link="Linked\Infrastructure\SensorRoomRecognitionService.cs" />
 
     <Compile Include="..\..\Aware\Platform\IMotionSettings.cs" Link="Linked\Platform\IMotionSettings.cs" />
+    <Compile Include="..\..\Aware\Platform\SimulatedFingerprintProvider.cs" Link="Linked\Platform\SimulatedFingerprintProvider.cs" />
 
     <Compile Include="..\..\Aware\Spatial\Math3D.cs" Link="Linked\Spatial\Math3D.cs" />
     <Compile Include="..\..\Aware\Spatial\SpatialMesh.cs" Link="Linked\Spatial\SpatialMesh.cs" />

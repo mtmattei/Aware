@@ -57,12 +57,20 @@ public partial class App : Microsoft.UI.Xaml.Application
 
                     // The only line that changes with the capability tier. On
                     // Android the room fingerprint comes from real sensors;
-                    // everywhere else recognition falls back to the stored
-                    // confidence and the experience is identical.
+                    // everywhere else there are none to read and recognition
+                    // settles on the model's own confidence.
 #if __ANDROID__
                     services.AddSingleton<IRoomFingerprintProvider, AndroidFingerprintProvider>();
 #else
-                    services.AddSingleton<IRoomFingerprintProvider, NullFingerprintProvider>();
+                    // AWARE_SIMULATE_SENSORS opts a sensorless platform into a
+                    // stand-in reading, so the link and recognition flows can be
+                    // driven without a device in hand. Unset — the default — this
+                    // is still no sensors.
+                    if (SimulatedFingerprintProvider.IsEnabled)
+                        services.AddSingleton<IRoomFingerprintProvider>(
+                            _ => new SimulatedFingerprintProvider(SimulatedFingerprintProvider.Mode));
+                    else
+                        services.AddSingleton<IRoomFingerprintProvider, NullFingerprintProvider>();
 #endif
 
                     services.AddSingleton<IMotionSettings, MotionSettings>();
