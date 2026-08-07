@@ -79,6 +79,46 @@ if (-not $ok) {
     throw "PrintWindow failed for handle $hwnd."
 }
 
+# PrintWindow can return TRUE and still hand back an empty frame for this Skia
+# GL window — validated 2026-08-07, where it silently produced blank captures of
+# a window that was rendering correctly on screen, and cost an hour of chasing a
+# non-existent "blank page" regression. A success return is not evidence of
+# pixels, so check, and fall back to a real screen grab.
+function Test-Blank {
+    param([System.Drawing.Bitmap]$Image)
+
+    $seen = @{}
+    for ($x = 4; $x -lt $Image.Width - 4; $x += 37) {
+        for ($y = 4; $y -lt $Image.Height - 4; $y += 37) {
+            $seen[$Image.GetPixel($x, $y).ToArgb()] = $true
+            if ($seen.Count -gt 3) { return $false }
+        }
+    }
+    return $true
+}
+
+if (Test-Blank -Image $bitmap) {
+    Write-Warning "PrintWindow returned an empty frame; falling back to a screen grab (occlusion matters)."
+
+    $bitmap.Dispose()
+
+    [void][Native.Win]::SetForegroundWindow($hwnd)
+    Start-Sleep -Milliseconds 500
+
+    $wr = New-Object Native.Win+RECT
+    [void][Native.Win]::GetWindowRect($hwnd, [ref]$wr)
+
+    $bitmap = New-Object System.Drawing.Bitmap ($wr.Right - $wr.Left), ($wr.Bottom - $wr.Top)
+    $screen = [System.Drawing.Graphics]::FromImage($bitmap)
+    $screen.CopyFromScreen(
+        $wr.Left, $wr.Top, 0, 0,
+        (New-Object System.Drawing.Size ($wr.Right - $wr.Left), ($wr.Bottom - $wr.Top)))
+    $screen.Dispose()
+
+    $width = $bitmap.Width
+    $height = $bitmap.Height
+}
+
 $directory = Split-Path -Parent $OutputPath
 if ($directory -and -not (Test-Path $directory)) {
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
