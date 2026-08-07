@@ -6,5 +6,20 @@
     See https://aka.platform.uno/using-uno-sdk#implicit-packages for more information regarding the Implicit Packages.
   -->
   <ItemGroup>
+    <!--
+      Test-only packages. The app itself takes every package from the Uno.Sdk
+      implicit set, which is why this list stays short.
+
+      SkiaSharp is pinned to the version Uno.Sdk 6.6.42 bundles so the renderer
+      exercised by the tests is byte-for-byte the one the app runs; a mismatch
+      between managed and native SkiaSharp is the first thing to suspect on a
+      renderer crash.
+    -->
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="SkiaSharp" Version="3.119.2" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Win32" Version="3.119.2" />
   </ItemGroup>
 </Project>

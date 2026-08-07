@@ -1,15 +1,5 @@
 namespace Aware.Platform;
 
-public interface IMotionSettings
-{
-    /// <summary>True when stagger, inertia and scale settling must be suppressed.</summary>
-    bool ReducedMotion { get; }
-
-    void SetUserOverride(bool? reducedMotion);
-
-    event EventHandler? Changed;
-}
-
 /// <summary>
 /// Reads the platform animation preference where one is exposed, and lets the
 /// user override it in-app. 08-ACCESSIBILITY-TESTS requires reduced motion to be

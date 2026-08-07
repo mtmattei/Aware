@@ -40,21 +40,32 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Git:** `main`, four commits, working tree clean.
+- **Tests:** `tests/Aware.Tests`, 61 tests, all passing, ~1 s. Covers the Projection, Hit
+  testing, Recognition and Actions blocks of `tests/TEST-CHECKLIST.md` and
+  `08-ACCESSIBILITY-TESTS.md`. Verified the suite actually bites: reversing the hit-buffer walk
+  in `SpatialRoomRenderer.HitTest` fails `ClosestObjectWinsWhenTwoOverlap` (mutation reverted).
+- **Git:** `main`, five commits, working tree clean.
 
 ## Next actions (in order)
 
-1. Stand up `Aware.Tests` and automate `tests/TEST-CHECKLIST.md`. The projection, hit-testing
-   and recognition cases are all pure functions of `Math3D`, `SpatialRoomRenderer.HitTest` and
-   `RenderSnapshotFactory` — cheap to cover, and currently zero coverage.
-2. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
+1. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
    of the height, because a 1.6:1 projected room cannot fill a 1:2.2 viewport. With the tray
    open it reads well (the gaps above and below the model are near-equal); with nothing
    selected the lower band is empty, reserved for the tray. If that reads as too sparse, the
    real fix is a lower camera elevation on narrow viewports, which makes the room taller in
    projection — not cropping.
-3. Phase 2 capture: implement `ISpatialCaptureAdapter` for one real tier. The boundary and the
-   simulation tier exist; nothing native sits behind them.
+2. **Real sensors, fingerprint half.** `RoomFingerprint` already exists in the domain and is
+   already persisted; only its values are fake. Filling them needs plain .NET Android APIs on
+   the attached Pixel — `SensorManager` for the magnetic vector, ambient light and pressure,
+   `WifiManager` / `BluetoothAdapter` scan results hashed rather than stored (07-DATA-PRIVACY
+   wants hashes, not device names). No ARCore, no binding project. That turns
+   `IRoomRecognitionService` into real matching, which is the "matching signals raise
+   confidence, contradictions lower confidence" case in 08-ACCESSIBILITY-TESTS.
+   Permissions to declare: `ACCESS_FINE_LOCATION`, `NEARBY_WIFI_DEVICES` (Android 13+),
+   `BLUETOOTH_SCAN`.
+3. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
+   story is the unknown — likely a binding project. The Pixel 8 supports the ARCore Depth API
+   through motion stereo despite having no ToF, so hardware is not the blocker.
 
 ## Decided this session (previously open)
 

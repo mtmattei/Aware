@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Aware.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+
+    <!-- Must match the SkiaSharp the Uno.Sdk bundles, so the renderer under test
+         is the same one the app runs. -->
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" />
+  </ItemGroup>
+
+  <!--
+    The layers under test are compiled into this assembly rather than reached
+    through a ProjectReference.
+
+    Aware is an Uno single project whose only target frameworks are platform
+    ones (android / ios / browserwasm / desktop); there is no plain net10.0 for a
+    test project to reference. 03-ARCHITECTURE.md sanctions this shape - "for the
+    first spike, these can remain namespaces/folders in one Uno single project" -
+    so the alternative would be either splitting Domain/Application/Spatial into
+    real class libraries or adding a bare TFM to the app. Both are larger changes
+    than the tests warrant today.
+
+    Only files with no XAML or platform dependency are listed. Anything touching
+    Windows.Storage, Microsoft.UI.Xaml or SKCanvasElement stays out.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\Aware\Domain\SpatialModels.cs" Link="Linked\Domain\SpatialModels.cs" />
+
+    <Compile Include="..\..\Aware\Application\Contracts.cs" Link="Linked\Application\Contracts.cs" />
+    <Compile Include="..\..\Aware\Application\RenderSnapshotFactory.cs" Link="Linked\Application\RenderSnapshotFactory.cs" />
+    <Compile Include="..\..\Aware\Application\ObjectActionResolver.cs" Link="Linked\Application\ObjectActionResolver.cs" />
+
+    <Compile Include="..\..\Aware\Infrastructure\SampleGarageFactory.cs" Link="Linked\Infrastructure\SampleGarageFactory.cs" />
+    <Compile Include="..\..\Aware\Infrastructure\SimulatedRoomRecognitionService.cs" Link="Linked\Infrastructure\SimulatedRoomRecognitionService.cs" />
+
+    <Compile Include="..\..\Aware\Platform\IMotionSettings.cs" Link="Linked\Platform\IMotionSettings.cs" />
+
+    <Compile Include="..\..\Aware\Spatial\Math3D.cs" Link="Linked\Spatial\Math3D.cs" />
+    <Compile Include="..\..\Aware\Spatial\SpatialMesh.cs" Link="Linked\Spatial\SpatialMesh.cs" />
+    <Compile Include="..\..\Aware\Spatial\SpatialPalette.cs" Link="Linked\Spatial\SpatialPalette.cs" />
+    <Compile Include="..\..\Aware\Spatial\SpatialRoomRenderer.cs" Link="Linked\Spatial\SpatialRoomRenderer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
