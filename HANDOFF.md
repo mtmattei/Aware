@@ -40,7 +40,7 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Tests:** `tests/Aware.Tests`, **83 tests**, all passing, ~4 s. Covers the Projection, Hit
+- **Tests:** `tests/Aware.Tests`, **91 tests**, all passing, ~4 s. Covers the Projection, Hit
   testing, Recognition and Actions blocks of `tests/TEST-CHECKLIST.md` and
   `08-ACCESSIBILITY-TESTS.md`, plus `PersistenceTests` round-tripping the model through the
   source-generated context. Verified the suite bites twice over: reversing the hit-buffer walk
@@ -53,16 +53,15 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
   the device correctly refused to confirm a room it is not in. That measurement was right; the
   way it was *displayed* was the bug, now fixed (see "Two confidences" below). **The device has
   not been re-tested since.**
-- **Git:** `main`, seven commits, working tree clean. Latest: `e1c49a5`.
+- **Git:** `main`, nine commits, working tree clean. Latest: `713bf3f`.
 
 ## Next actions (in order)
 
-1. **Verify the link flow on the Pixel 8.** Unverified on device — desktop has no sensors, so
-   the Link button never appears there. Delete the app's stored room first (or reinstall):
-   a room saved before this change still carries the old invented fingerprint and will keep
-   reporting a contradiction, which looks like the fix did not take. Expect: unlinked sample →
-   "98% confident · not linked to a place yet" + **Link to this place** → tap → "you are here ·
-   N signals match" → walk to another room and relaunch → "you are somewhere else".
+1. **Confirm the link flow on the Pixel 8 with real sensors.** All four states are verified on
+   desktop through the simulated provider (below), so this is confirmation against real
+   hardware, not first contact. Delete the app's stored room first or reinstall: a room saved
+   before `e1c49a5` still carries the old invented fingerprint and will keep reporting a
+   contradiction, which looks like the fix did not take.
 2. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
    of the height, because a 1.6:1 projected room cannot fill a 1:2.2 viewport. With the tray
    open it reads well (the gaps above and below the model are near-equal); with nothing
@@ -90,8 +89,8 @@ after it (`RecognitionMessages.Settled`):
 |---|---|
 | no sensors | `98% confident · stable room model` |
 | unlinked | `98% confident · not linked to a place yet` |
-| match | `98% confident · you are here · 3 signals match` |
-| mismatch | `98% confident · you are somewhere else · magnetic signature disagrees` |
+| match | `98% confident · you are here · 4 signals match` |
+| mismatch | `98% confident · you are somewhere else · 4 signals disagree` |
 
 `SpatialRoom.Fingerprint` is optional and the seeded garage ships `null` — its old fingerprint
 was invented, so scoring against it manufactured a contradiction out of fiction. `LinkedTo` /
@@ -99,11 +98,33 @@ was invented, so scoring against it manufactured a contradiction out of fiction.
 `WhenWritingNull` means an unlinked room writes no key, and rooms saved earlier load as
 already-linked rooms, which is what they are.
 
-**The harness broke, not the app.** Synthesized input via `tools/Send-Input.ps1` stopped
-reaching this Release exe — a control drag over open viewport (untouched by any change) also
-did nothing, while window activation and `PrintWindow` capture both worked. Suspect UIPI
-dropping injected input from a different-integrity shell. Static capture, disk state and the
-test suite carried the verification instead. Re-establish the harness before relying on it.
+**The harness was never broken — the coordinates were.** `tools/Send-Input.ps1` takes
+**client** coordinates. `tools/Capture-Window.ps1` captures the **whole window**, frame
+included, so anything measured off a screenshot is in window space and runs ~31px low and 8px
+right. Every "input isn't landing" symptom was clicks missing their target. Convert before
+sending: `client = image − (8, 31)` at 96 DPI, or read the true offset from
+`ClientToScreen(hwnd, 0,0) − GetWindowRect.topleft`. `tools/Diagnose-Input.ps1` prints
+aim-versus-landing and settles it in one run. The earlier UIPI theory in this file was wrong.
+
+## Simulated sensors (2026-08-07, commit 713bf3f)
+
+`AWARE_SIMULATE_SENSORS` opts a sensorless platform into a stand-in reading, so the link and
+recognition flows are drivable without a phone. Unset — the default — desktop and the browser
+still report no sensors, which keeps the capability-tier promise honest.
+
+```powershell
+$env:AWARE_SIMULATE_SENSORS = "1"          # a consistent place; link here and it matches
+$env:AWARE_SIMULATE_SENSORS = "elsewhere"  # a different place; the contradiction path
+```
+
+Verified end to end on desktop, all four states, **model confidence holding at 98% in every
+one including the mismatch** — the regression the split exists to prevent, now proven at
+runtime rather than only in a unit test. The link survived a full process restart with exactly
+the reading it took.
+
+Same pass fixed a layout defect no unit test could see: the lens selector's
+`Margin="20,152,20,0"` was an absolute offset assuming the title block's exact height, so the
+Link button rendered *underneath* the pills. The top-left column now flows in one stack.
 
 ## Decided this session (previously open)
 
