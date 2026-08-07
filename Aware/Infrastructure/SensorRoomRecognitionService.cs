@@ -56,10 +56,14 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
         var reading = ReadAsync(ct);
 
         await Task.Delay(TimeSpan.FromMilliseconds(800 * scale), ct);
-        yield return new RecognitionState("Walls and floor recognized", .19f, .46f, false);
+        yield return new RecognitionState(
+            room.IsModelled ? "Walls and floor recognized" : "Reading this place", .19f, .46f, false);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(1100 * scale), ct);
-        yield return new RecognitionState("Furniture geometry resolving", .45f, .67f, false);
+        if (room.IsModelled)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(1100 * scale), ct);
+            yield return new RecognitionState("Furniture geometry resolving", .45f, .67f, false);
+        }
 
         var live = await reading;
         LastReading = live;
@@ -74,14 +78,20 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
 
         var canLink = live.HasAnySignal && room.Fingerprint is null;
 
-        await Task.Delay(TimeSpan.FromMilliseconds(1100 * scale), ct);
-        yield return new RecognitionState(RecognitionMessages.Matching(comparison), .71f, .88f, false);
+        // "Known objects matching" would be a lie about a room with no objects,
+        // so a recognition-only room skips straight to its verdict.
+        if (room.IsModelled)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(1100 * scale), ct);
+            yield return new RecognitionState(RecognitionMessages.Matching(comparison), .71f, .88f, false);
+        }
 
         await Task.Delay(TimeSpan.FromMilliseconds(1200 * scale), ct);
 
         // The model's own confidence, unchanged by where the device is standing.
         yield return new RecognitionState(
-            RecognitionMessages.Settled(room.Confidence, comparison, canLink), 1f, room.Confidence, true);
+            RecognitionMessages.Settled(room.Confidence, comparison, canLink, room.IsModelled),
+            1f, room.Confidence, true);
     }
 
     private async Task<FingerprintReading> ReadAsync(CancellationToken ct)

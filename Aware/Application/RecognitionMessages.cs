@@ -37,18 +37,28 @@ public static class RecognitionMessages
     /// Distinguishes "unlinked" from "no sensors", which are the same null
     /// comparison but very different sentences.
     /// </param>
-    public static string Settled(float confidence, FingerprintComparison? comparison, bool canLink)
+    public static string Settled(
+        float confidence,
+        FingerprintComparison? comparison,
+        bool canLink,
+        bool isModelled = true)
     {
-        var percent = $"{confidence * 100:0}% confident";
+        // A recognition-only room has no geometry, so a percentage describing
+        // geometry would be a number about nothing. The place clauses still apply
+        // — that half is exactly what such a room does know.
+        var lead = isModelled ? $"{confidence * 100:0}% confident" : "No model yet";
 
-        // No sensors, so there is no place question to answer: the brief's line, verbatim.
-        if (comparison is null && !canLink) return $"{percent} · stable room model";
+        if (comparison is null && !canLink)
+            return isModelled ? $"{lead} · stable room model" : $"{lead} · nothing to recognize it by";
 
-        if (comparison is null) return $"{percent} · not linked to a place yet";
+        if (comparison is null) return $"{lead} · not linked to a place yet";
 
-        return comparison.IsRecognized
-            ? $"{percent} · you are here · {Describe(comparison.Agreements)}"
-            : $"{percent} · you are somewhere else · {Explain(comparison.Contradictions)}";
+        if (!comparison.IsRecognized)
+            return isModelled
+                ? $"{lead} · you are somewhere else · {Explain(comparison.Contradictions)}"
+                : $"{lead} · you are somewhere else";
+
+        return $"{lead} · you are here · {Describe(comparison.Agreements)}";
     }
 
     private static string Describe(IReadOnlyList<string> agreements) =>

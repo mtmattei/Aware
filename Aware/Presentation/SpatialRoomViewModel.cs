@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Aware.Application;
 using Aware.Domain;
+using Aware.Infrastructure;
 using Aware.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -54,6 +55,21 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     /// is nothing to link with.
     /// </summary>
     [ObservableProperty] private bool canLinkPlace;
+
+    /// <summary>
+    /// True where the device can sense a place at all. Without it, creating a
+    /// room would produce one with no fingerprint — a room that can never be
+    /// recognized — so the affordance is hidden rather than offered and failing.
+    /// </summary>
+    [ObservableProperty] private bool canAddPlace;
+
+    [ObservableProperty] private bool showAddPlace;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfirmAddPlace))]
+    private string newPlaceName = string.Empty;
+
+    public bool CanConfirmAddPlace => !string.IsNullOrWhiteSpace(NewPlaceName);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTrayOpen))]
@@ -184,6 +200,104 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
         // Only offered once recognition has settled, so the reading it would store
         // is the one the user just watched being taken.
+        CanLinkPlace = _room is { Fingerprint: null }
+                       && _recognition.LastReading is { HasAnySignal: true };
+
+        CanAddPlace = _fingerprints.IsAvailable;
+    }
+
+    // ------------------------------------------------------------------
+    // Setting up the room you are standing in (SPEC.md, recognition-only rooms)
+    // ------------------------------------------------------------------
+
+    [RelayCommand]
+    private void BeginAddPlace()
+    {
+        NewPlaceName = string.Empty;
+        ShowAddPlace = true;
+    }
+
+    [RelayCommand]
+    private void CancelAddPlace() => ShowAddPlace = false;
+
+    /// <summary>
+    /// Creates a room for the place the device is in right now: a name, an ambient
+    /// fingerprint, and no geometry.
+    ///
+    /// <para>The reading is taken <em>here</em> rather than when the sheet opened,
+    /// because the user may have walked while naming it and the place they mean is
+    /// where they are when they commit.</para>
+    /// </summary>
+    [RelayCommand]
+    private async Task ConfirmAddPlaceAsync()
+    {
+        if (!CanConfirmAddPlace) return;
+
+        var ct = _lifetime.Token;
+        var name = NewPlaceName.Trim();
+
+        FingerprintReading reading;
+        try
+        {
+            reading = await _fingerprints.ReadAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not read the place while adding a room.");
+            StatusMessage = "Could not read this place. Nothing was saved.";
+            return;
+        }
+
+        if (!reading.HasAnySignal)
+        {
+            StatusMessage = "No signals here to recognize this place by. Nothing was saved.";
+            return;
+        }
+
+        // Warn on a place that already matches a stored room, but allow it: two
+        // rooms can legitimately share a signature, and refusing would strand the
+        // user with no way to record the second.
+        var existing = await _rooms.GetRoomsAsync(ct);
+        var clash = existing.FirstOrDefault(r =>
+            r.Fingerprint is { } f && _matcher.Compare(f, reading).IsRecognized);
+
+        var room = UnmodelledRoomFactory.Create(name, reading.Fingerprint, DateTimeOffset.Now);
+        await _rooms.SaveRoomAsync(room, ct);
+
+        ShowAddPlace = false;
+        await OpenAsync(room, ct);
+
+        StatusMessage = clash is null
+            ? $"{room.Name} is linked to this place. Aware will recognize it from here on."
+            : $"{room.Name} saved. This looks a lot like {clash.Name}, so the two may be hard to tell apart.";
+
+        _haptics.Play(HapticKind.Confirm);
+    }
+
+    /// <summary>Switches the open room and replays recognition against it.</summary>
+    private async Task OpenAsync(SpatialRoom room, CancellationToken ct)
+    {
+        _room = room;
+        RoomName = room.Name;
+        SelectedObjectId = null;
+        ActionTray = null;
+        TrayMode = TrayMode.Actions;
+        ActiveLens = SpatialLens.Explore;
+
+        RebuildObjectList();
+        Refresh();
+
+        await foreach (var state in _recognition.RecognizeAsync(room, ct))
+        {
+            RecognitionMessage = state.Message;
+            RecognitionProgress = state.Progress;
+            IsRoomStable = state.IsStable;
+        }
+
         CanLinkPlace = _room is { Fingerprint: null }
                        && _recognition.LastReading is { HasAnySignal: true };
     }

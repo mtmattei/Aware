@@ -133,6 +133,14 @@ public sealed record SpatialRoom(
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsLinkedToPlace => Fingerprint is not null;
 
+    /// <summary>
+    /// False for a recognition-only room: a known place with no model of it yet.
+    /// Geometry and place are independent, so both booleans are needed and a
+    /// single "kind" discriminator would drift from the data it describes.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsModelled => Shell.Count > 0 || Objects.Count > 0;
+
     public SpatialObject? FindObject(SpatialObjectId id) =>
         Objects.FirstOrDefault(o => o.Id == id);
 

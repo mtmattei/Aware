@@ -217,6 +217,17 @@
                 AutomationProperties.Name="Link this room to the place you are in"
                 AutomationProperties.HelpText="Stores the ambient signals around you so Aware can recognize this room later." />
 
+        <!-- Set up the room you are standing in. Hidden where nothing can be
+             sensed, since a room with no fingerprint could never be recognized. -->
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Add this place"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Left"
+                Command="{Binding BeginAddPlaceCommand}"
+                Visibility="{Binding CanAddPlace, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="Add the room you are standing in"
+                AutomationProperties.HelpText="Names this place and stores the signals around you, so Aware recognizes it when you come back." />
+
         <!-- 3. Lens selector. Flows under the title block and, when shown,
              the Link button — no absolute offset to keep in sync. -->
         <Border Margin="0,24,0,0"
@@ -449,6 +460,50 @@
           </StackPanel>
         </Grid>
       </Border>
+
+      <!-- Name this place. An overlay card rather than a ContentDialog: an
+           implicit ContentDialog style never reaches a subclass on Uno, and its
+           panel radius and command row are unreachable from a Style anyway. This
+           reuses the first-launch card, which already renders correctly. -->
+      <Grid Background="{StaticResource AwareScrimBrush}"
+            Visibility="{Binding ShowAddPlace, Converter={StaticResource BoolToVisibility}}">
+        <Border MaxWidth="440"
+                Margin="24"
+                Padding="26"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                CornerRadius="{StaticResource AwareTrayRadius}"
+                Background="{StaticResource AwareCanvasNearBrush}">
+          <StackPanel Spacing="12">
+            <local:TrackedText Text="NEW PLACE"
+                               Tracking="3"
+                               TextStyle="{StaticResource AwareEyebrowTextStyle}" />
+
+            <TextBlock Text="What is this room called?"
+                       Style="{StaticResource AwareTrayTitleTextStyle}" />
+
+            <TextBlock Text="Aware stores the signals around you so it recognizes this room when you come back. It will not have a model of the room's shape yet."
+                       Style="{StaticResource AwareBodyTextStyle}" />
+
+            <TextBox Text="{Binding NewPlaceName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="Kitchen"
+                     Header="Room name"
+                     AutomationProperties.Name="Room name" />
+
+            <StackPanel Margin="0,8,0,0"
+                        Orientation="Horizontal"
+                        Spacing="8">
+              <Button Content="Add this place"
+                      Style="{StaticResource AwarePrimaryButtonStyle}"
+                      IsEnabled="{Binding CanConfirmAddPlace}"
+                      Command="{Binding ConfirmAddPlaceCommand}" />
+              <Button Content="Cancel"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding CancelAddPlaceCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
 
       <!-- 1. First launch -->
       <Grid Background="{StaticResource AwareScrimBrush}"

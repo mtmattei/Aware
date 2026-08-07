@@ -46,6 +46,7 @@
 
     <Compile Include="..\..\Aware\Infrastructure\SampleGarageFactory.cs" Link="Linked\Infrastructure\SampleGarageFactory.cs" />
     <Compile Include="..\..\Aware\Infrastructure\SpatialJson.cs" Link="Linked\Infrastructure\SpatialJson.cs" />
+    <Compile Include="..\..\Aware\Infrastructure\UnmodelledRoomFactory.cs" Link="Linked\Infrastructure\UnmodelledRoomFactory.cs" />
     <Compile Include="..\..\Aware\Infrastructure\SensorRoomRecognitionService.cs" Link="Linked\Infrastructure\SensorRoomRecognitionService.cs" />
 
     <Compile Include="..\..\Aware\Platform\IMotionSettings.cs" Link="Linked\Platform\IMotionSettings.cs" />
