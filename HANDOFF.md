@@ -40,11 +40,16 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Tests:** `tests/Aware.Tests`, 61 tests, all passing, ~1 s. Covers the Projection, Hit
+- **Tests:** `tests/Aware.Tests`, 73 tests, all passing, ~3 s. Covers the Projection, Hit
   testing, Recognition and Actions blocks of `tests/TEST-CHECKLIST.md` and
   `08-ACCESSIBILITY-TESTS.md`. Verified the suite actually bites: reversing the hit-buffer walk
   in `SpatialRoomRenderer.HitTest` fails `ClosestObjectWinsWhenTwoOverlap` (mutation reverted).
-- **Git:** `main`, five commits, working tree clean.
+- **Real sensors: working on the Pixel 8.** `AndroidFingerprintProvider` reads the magnetic
+  vector, ambient light, air pressure and a hash of the Wi-Fi neighbourhood; `FingerprintMatcher`
+  scores it against the stored room. Against the seeded garage — whose fingerprint is fictional —
+  the device correctly reported **"18% confident · magnetic signature disagrees"** rather than
+  confirming a room it is not in. Confidence going *down* is the proof it is measuring.
+- **Git:** `main`, six commits, working tree clean.
 
 ## Next actions (in order)
 
@@ -54,16 +59,15 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
    selected the lower band is empty, reserved for the tray. If that reads as too sparse, the
    real fix is a lower camera elevation on narrow viewports, which makes the room taller in
    projection — not cropping.
-2. **Real sensors, fingerprint half.** `RoomFingerprint` already exists in the domain and is
-   already persisted; only its values are fake. Filling them needs plain .NET Android APIs on
-   the attached Pixel — `SensorManager` for the magnetic vector, ambient light and pressure,
-   `WifiManager` / `BluetoothAdapter` scan results hashed rather than stored (07-DATA-PRIVACY
-   wants hashes, not device names). No ARCore, no binding project. That turns
-   `IRoomRecognitionService` into real matching, which is the "matching signals raise
-   confidence, contradictions lower confidence" case in 08-ACCESSIBILITY-TESTS.
-   Permissions to declare: `ACCESS_FINE_LOCATION`, `NEARBY_WIFI_DEVICES` (Android 13+),
-   `BLUETOOTH_SCAN`.
-3. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
+2. **Decide what a seeded room should do against live sensors.** The sample garage now reads
+   ~18% because its fingerprint is invented and you are not standing in it. That is honest but
+   makes the demo look broken. Options: stamp the seeded room with the first live reading so it
+   becomes "the room you set this up in"; mark it as a sample that is exempt from matching; or
+   leave it. This is a product call, not a bug.
+3. **Bluetooth is the one unread signal.** `BluetoothFeatureHash` is still empty — a BLE scan
+   needs an async callback and the `BLUETOOTH_SCAN` permission, which is why it was left out of
+   the first pass. It would add a fifth signal to the match.
+4. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
    story is the unknown — likely a binding project. The Pixel 8 supports the ARCore Depth API
    through motion stereo despite having no ToF, so hardware is not the blocker.
 
