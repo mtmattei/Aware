@@ -33,7 +33,12 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
     /// </summary>
     private const int AccessPointsHashed = 8;
 
-    private static bool _permissionRequested;
+    /// <summary>
+    /// Persisted rather than held in a static, so the prompt happens once per
+    /// install instead of once per launch. A declined permission asking again on
+    /// every cold start is the behaviour this replaces.
+    /// </summary>
+    private const string PermissionAskedKey = "aware.wifi.permission.asked";
 
     private readonly ILogger<AndroidFingerprintProvider> _log;
     private readonly Context? _context;
@@ -178,6 +183,39 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
         ? "android.permission.NEARBY_WIFI_DEVICES"
         : Android.Manifest.Permission.AccessFineLocation;
 
+    /// <summary>
+    /// Whether the one prompt has already been shown, surviving process restarts.
+    /// Storage being unavailable falls back to asking next launch, which is the
+    /// old behaviour rather than a new failure mode.
+    /// </summary>
+    private static bool HasAskedForPermission
+    {
+        get
+        {
+            try
+            {
+                return Windows.Storage.ApplicationData.Current.LocalSettings.Values
+                    .TryGetValue(PermissionAskedKey, out var value) && value is true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        set
+        {
+            try
+            {
+                Windows.Storage.ApplicationData.Current.LocalSettings
+                    .Values[PermissionAskedKey] = value;
+            }
+            catch
+            {
+                // Non-fatal: the prompt simply reappears on the next launch.
+            }
+        }
+    }
+
     private bool HasWifiPermission
     {
         get
@@ -193,18 +231,27 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
     }
 
     /// <summary>
-    /// Asks once per process. The grant lands on the activity's own callback, so
-    /// rather than thread that back here the read simply waits for the state to
-    /// flip, and gives up if the user ignores or declines the prompt.
+    /// Asks exactly once per install, then never again. The grant lands on the
+    /// activity's own callback, so rather than thread that back here the read
+    /// waits for the state to flip, and gives up if the user ignores the prompt.
+    ///
+    /// <para>Everything after that first ask is automatic:
+    /// <see cref="HasWifiPermission"/> is read live on every reading, so a user
+    /// who declines and later grants it in system settings starts contributing
+    /// the Wi-Fi signal on the next recognition with no second prompt. Declining
+    /// simply means one fewer signal, and the matcher renormalizes.</para>
     /// </summary>
     private async Task EnsureWifiPermissionAsync(CancellationToken ct)
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(23)) return;
-        if (HasWifiPermission || _permissionRequested) return;
-        _permissionRequested = true;
+        if (HasWifiPermission || HasAskedForPermission) return;
 
         if (Uno.UI.ContextHelper.Current is not Android.App.Activity activity)
             return;
+
+        // Recorded before the prompt, and only once an activity exists to show
+        // it — a launch with no activity must not burn the single ask.
+        HasAskedForPermission = true;
 
         try
         {
