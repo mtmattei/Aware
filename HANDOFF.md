@@ -1,5 +1,5 @@
 # HANDOFF — Aware spatial room fingerprint (Phase 1 build)
-Updated: 2026-08-06
+Updated: 2026-08-07
 
 ## Where we are
 
@@ -40,36 +40,70 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Tests:** `tests/Aware.Tests`, 73 tests, all passing, ~3 s. Covers the Projection, Hit
+- **Tests:** `tests/Aware.Tests`, **83 tests**, all passing, ~4 s. Covers the Projection, Hit
   testing, Recognition and Actions blocks of `tests/TEST-CHECKLIST.md` and
-  `08-ACCESSIBILITY-TESTS.md`. Verified the suite actually bites: reversing the hit-buffer walk
-  in `SpatialRoomRenderer.HitTest` fails `ClosestObjectWinsWhenTwoOverlap` (mutation reverted).
+  `08-ACCESSIBILITY-TESTS.md`, plus `PersistenceTests` round-tripping the model through the
+  source-generated context. Verified the suite bites twice over: reversing the hit-buffer walk
+  in `SpatialRoomRenderer.HitTest` fails `ClosestObjectWinsWhenTwoOverlap`, and restoring the
+  collapsed `comparison?.Confidence ?? room.Confidence` fails
+  `StandingInADifferentRoomDoesNotLowerModelConfidence` (both mutations reverted).
 - **Real sensors: working on the Pixel 8.** `AndroidFingerprintProvider` reads the magnetic
   vector, ambient light, air pressure and a hash of the Wi-Fi neighbourhood; `FingerprintMatcher`
-  scores it against the stored room. Against the seeded garage — whose fingerprint is fictional —
-  the device correctly reported **"18% confident · magnetic signature disagrees"** rather than
-  confirming a room it is not in. Confidence going *down* is the proof it is measuring.
-- **Git:** `main`, six commits, working tree clean.
+  scores it against the stored room. Against the seeded garage — whose fingerprint was fictional —
+  the device correctly refused to confirm a room it is not in. That measurement was right; the
+  way it was *displayed* was the bug, now fixed (see "Two confidences" below). **The device has
+  not been re-tested since.**
+- **Git:** `main`, seven commits, working tree clean. Latest: `e1c49a5`.
 
 ## Next actions (in order)
 
-1. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
+1. **Verify the link flow on the Pixel 8.** Unverified on device — desktop has no sensors, so
+   the Link button never appears there. Delete the app's stored room first (or reinstall):
+   a room saved before this change still carries the old invented fingerprint and will keep
+   reporting a contradiction, which looks like the fix did not take. Expect: unlinked sample →
+   "98% confident · not linked to a place yet" + **Link to this place** → tap → "you are here ·
+   N signals match" → walk to another room and relaunch → "you are somewhere else".
+2. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
    of the height, because a 1.6:1 projected room cannot fill a 1:2.2 viewport. With the tray
    open it reads well (the gaps above and below the model are near-equal); with nothing
    selected the lower band is empty, reserved for the tray. If that reads as too sparse, the
    real fix is a lower camera elevation on narrow viewports, which makes the room taller in
    projection — not cropping.
-2. **Decide what a seeded room should do against live sensors.** The sample garage now reads
-   ~18% because its fingerprint is invented and you are not standing in it. That is honest but
-   makes the demo look broken. Options: stamp the seeded room with the first live reading so it
-   becomes "the room you set this up in"; mark it as a sample that is exempt from matching; or
-   leave it. This is a product call, not a bug.
 3. **Bluetooth is the one unread signal.** `BluetoothFeatureHash` is still empty — a BLE scan
    needs an async callback and the `BLUETOOTH_SCAN` permission, which is why it was left out of
    the first pass. It would add a fifth signal to the match.
 4. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
    story is the unknown — likely a binding project. The Pixel 8 supports the ARCore Depth API
    through motion stereo despite having no ToF, so hardware is not the blocker.
+
+## Two confidences (2026-08-07, commit e1c49a5)
+
+The seeded-room question from the last handoff turned out to be a modelling bug wearing a
+product question's clothes. "98% confident" describes the **geometry**; the fingerprint
+comparison answers whether the device is **standing in the place**. Recognition wrote the
+second into the first, so a correct sensor reading rendered as a collapsed model.
+
+They are separate now. The percentage is always model confidence; location reads as clauses
+after it (`RecognitionMessages.Settled`):
+
+| situation | line |
+|---|---|
+| no sensors | `98% confident · stable room model` |
+| unlinked | `98% confident · not linked to a place yet` |
+| match | `98% confident · you are here · 3 signals match` |
+| mismatch | `98% confident · you are somewhere else · magnetic signature disagrees` |
+
+`SpatialRoom.Fingerprint` is optional and the seeded garage ships `null` — its old fingerprint
+was invented, so scoring against it manufactured a contradiction out of fiction. `LinkedTo` /
+`Unlinked` bind and release a place without touching geometry or IDs. **Migration: none.**
+`WhenWritingNull` means an unlinked room writes no key, and rooms saved earlier load as
+already-linked rooms, which is what they are.
+
+**The harness broke, not the app.** Synthesized input via `tools/Send-Input.ps1` stopped
+reaching this Release exe — a control drag over open viewport (untouched by any change) also
+did nothing, while window activation and `PrintWindow` capture both worked. Suspect UIPI
+dropping injected input from a different-integrity shell. Static capture, disk state and the
+test suite carried the verification instead. Re-establish the harness before relying on it.
 
 ## Decided this session (previously open)
 
@@ -144,3 +178,9 @@ Reset to the pristine seeded room by deleting
 `%LOCALAPPDATA%\Aware\com.companyname.aware\LocalState\spatial\room-garage-001.json`;
 the repository re-seeds on next launch. The onboarding flag lives in `LocalSettings`
 under `aware.onboarding.seen`.
+
+**Do this reset on every device that ran a build before `e1c49a5`**, including the Pixel 8.
+Rooms saved earlier carry the invented fingerprint and stay linked to a place that never
+existed, so they keep reporting a mismatch and the fix looks like it did not land. The desktop
+copy has been reset already; the pre-reset file is kept beside it as
+`room-garage-001.json.pre-unlink.bak` and can be deleted.
