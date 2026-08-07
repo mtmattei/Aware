@@ -14,6 +14,7 @@
 
     <!-- Must match the SkiaSharp the Uno.Sdk bundles, so the renderer under test
          is the same one the app runs. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" />
   </ItemGroup>
@@ -39,9 +40,11 @@
     <Compile Include="..\..\Aware\Application\Contracts.cs" Link="Linked\Application\Contracts.cs" />
     <Compile Include="..\..\Aware\Application\RenderSnapshotFactory.cs" Link="Linked\Application\RenderSnapshotFactory.cs" />
     <Compile Include="..\..\Aware\Application\ObjectActionResolver.cs" Link="Linked\Application\ObjectActionResolver.cs" />
+    <Compile Include="..\..\Aware\Application\IRoomFingerprintProvider.cs" Link="Linked\Application\IRoomFingerprintProvider.cs" />
+    <Compile Include="..\..\Aware\Application\FingerprintMatcher.cs" Link="Linked\Application\FingerprintMatcher.cs" />
 
     <Compile Include="..\..\Aware\Infrastructure\SampleGarageFactory.cs" Link="Linked\Infrastructure\SampleGarageFactory.cs" />
-    <Compile Include="..\..\Aware\Infrastructure\SimulatedRoomRecognitionService.cs" Link="Linked\Infrastructure\SimulatedRoomRecognitionService.cs" />
+    <Compile Include="..\..\Aware\Infrastructure\SensorRoomRecognitionService.cs" Link="Linked\Infrastructure\SensorRoomRecognitionService.cs" />
 
     <Compile Include="..\..\Aware\Platform\IMotionSettings.cs" Link="Linked\Platform\IMotionSettings.cs" />
 

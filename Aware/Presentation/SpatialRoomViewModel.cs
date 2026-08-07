@@ -23,6 +23,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     private readonly IRenderSnapshotFactory _snapshots;
     private readonly IObjectActionResolver _actions;
     private readonly ISpatialCaptureAdapter _capture;
+    private readonly IRoomFingerprintProvider _fingerprints;
     private readonly IPrivacyService _privacy;
     private readonly IHapticsService _haptics;
     private readonly IMotionSettings _motion;
@@ -61,6 +62,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         IRenderSnapshotFactory snapshots,
         IObjectActionResolver actions,
         ISpatialCaptureAdapter capture,
+        IRoomFingerprintProvider fingerprints,
         IPrivacyService privacy,
         IHapticsService haptics,
         IMotionSettings motion,
@@ -71,6 +73,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         _snapshots = snapshots;
         _actions = actions;
         _capture = capture;
+        _fingerprints = fingerprints;
         _privacy = privacy;
         _haptics = haptics;
         _motion = motion;
@@ -141,7 +144,11 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         await _privacy.LoadAsync(ct);
 
         var capabilities = await _capture.GetCapabilitiesAsync(ct);
-        CaptureCapability = capabilities.Summary;
+
+        // What this device can actually sense, said plainly on first launch.
+        CaptureCapability = _fingerprints.IsAvailable
+            ? $"{capabilities.Summary} · {_fingerprints.Summary}"
+            : capabilities.Summary;
 
         ShowOnboarding = !HasSeenOnboarding();
 

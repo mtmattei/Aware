@@ -44,7 +44,8 @@ public partial class App : Microsoft.UI.Xaml.Application
                 {
                     // Application ports.
                     services.AddSingleton<IRoomRepository, JsonRoomRepository>();
-                    services.AddSingleton<IRoomRecognitionService, SimulatedRoomRecognitionService>();
+                    services.AddSingleton<IRoomRecognitionService, SensorRoomRecognitionService>();
+                    services.AddSingleton<IFingerprintMatcher, FingerprintMatcher>();
                     services.AddSingleton<IRenderSnapshotFactory, RenderSnapshotFactory>();
                     services.AddSingleton<IObjectActionResolver, ObjectActionResolver>();
                     services.AddSingleton<IPrivacyService, PrivacyService>();
@@ -53,6 +54,17 @@ public partial class App : Microsoft.UI.Xaml.Application
                     // registration change; the experience above it is unchanged.
                     services.AddSingleton<ISpatialCaptureAdapter, SimulationCaptureAdapter>();
                     services.AddSingleton<IHapticsService, HapticsService>();
+
+                    // The only line that changes with the capability tier. On
+                    // Android the room fingerprint comes from real sensors;
+                    // everywhere else recognition falls back to the stored
+                    // confidence and the experience is identical.
+#if __ANDROID__
+                    services.AddSingleton<IRoomFingerprintProvider, AndroidFingerprintProvider>();
+#else
+                    services.AddSingleton<IRoomFingerprintProvider, NullFingerprintProvider>();
+#endif
+
                     services.AddSingleton<IMotionSettings, MotionSettings>();
 
                     services.AddTransient<SpatialRoomViewModel>();

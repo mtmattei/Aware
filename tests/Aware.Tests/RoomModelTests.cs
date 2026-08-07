@@ -3,6 +3,7 @@ using Aware.Application;
 using Aware.Domain;
 using Aware.Infrastructure;
 using Aware.Platform;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aware.Tests;
 
@@ -194,10 +195,9 @@ public class RoomModelTests
     public async Task RecognitionRaisesConfidenceAndSettlesStable()
     {
         var room = Room();
-        var service = new SimulatedRoomRecognitionService(new FakeMotionSettings(reducedMotion: true));
-
         var states = new List<RecognitionState>();
-        await foreach (var state in service.RecognizeAsync(room, CancellationToken.None))
+
+        await foreach (var state in Recognizer(FakeFingerprints.None).RecognizeAsync(room, CancellationToken.None))
             states.Add(state);
 
         Assert.NotEmpty(states);
@@ -212,6 +212,8 @@ public class RoomModelTests
         var final = states[^1];
         Assert.True(final.IsStable);
         Assert.Equal(1f, final.Progress, precision: 3);
+
+        // With no sensors the stored confidence is the honest answer.
         Assert.Equal(room.Confidence, final.Confidence, precision: 3);
 
         // Never an empty spinner: every step names what resolved (02-UX-FLOWS).
@@ -219,16 +221,67 @@ public class RoomModelTests
     }
 
     [Fact]
+    public async Task MatchingSignalsProduceHighConfidence()
+    {
+        var room = Room();
+        var recognizer = Recognizer(FakeFingerprints.Matching(room.Fingerprint));
+
+        var final = await FinalState(recognizer, room);
+
+        Assert.True(final.Confidence > .9f,
+            $"A live reading identical to the stored room should be recognized, got {final.Confidence}.");
+        Assert.Contains("match", final.Message);
+    }
+
+    [Fact]
+    public async Task ContradictingSignalsLowerConfidence()
+    {
+        var room = Room();
+        var recognizer = Recognizer(FakeFingerprints.Contradicting(room.Fingerprint));
+
+        var final = await FinalState(recognizer, room);
+
+        Assert.True(final.Confidence < .4f,
+            $"A reading from a different room should not be recognized, got {final.Confidence}.");
+    }
+
+    [Fact]
+    public async Task ASensorFailureFallsBackToTheStoredConfidence()
+    {
+        var room = Room();
+        var final = await FinalState(Recognizer(FakeFingerprints.Throwing), room);
+
+        Assert.Equal(room.Confidence, final.Confidence, precision: 3);
+        Assert.True(final.IsStable);
+    }
+
+    [Fact]
     public async Task RecognitionCanBeCancelledMidway()
     {
         using var cts = new CancellationTokenSource();
-        var service = new SimulatedRoomRecognitionService(new FakeMotionSettings(reducedMotion: false));
+        var recognizer = Recognizer(FakeFingerprints.None, reducedMotion: false);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var _ in service.RecognizeAsync(Room(), cts.Token))
+            await foreach (var _ in recognizer.RecognizeAsync(Room(), cts.Token))
                 await cts.CancelAsync();
         });
+    }
+
+    private static SensorRoomRecognitionService Recognizer(
+        IRoomFingerprintProvider provider, bool reducedMotion = true) =>
+        new(provider, new FingerprintMatcher(),
+            new FakeMotionSettings(reducedMotion),
+            NullLogger<SensorRoomRecognitionService>.Instance);
+
+    private static async Task<RecognitionState> FinalState(
+        SensorRoomRecognitionService recognizer, SpatialRoom room)
+    {
+        RecognitionState? last = null;
+        await foreach (var state in recognizer.RecognizeAsync(room, CancellationToken.None))
+            last = state;
+
+        return last ?? throw new InvalidOperationException("Recognition produced no state.");
     }
 
     private sealed class FakeMotionSettings(bool reducedMotion) : IMotionSettings
@@ -242,5 +295,38 @@ public class RoomModelTests
             ReducedMotion = reducedMotion ?? false;
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private sealed class FakeFingerprints(
+        bool available, Func<FingerprintReading>? read = null) : IRoomFingerprintProvider
+    {
+        public static FakeFingerprints None { get; } = new(available: false);
+
+        public static FakeFingerprints Throwing { get; } =
+            new(available: true, () => throw new InvalidOperationException("sensor exploded"));
+
+        public static FakeFingerprints Matching(RoomFingerprint stored) =>
+            new(available: true, () => Reading(stored));
+
+        public static FakeFingerprints Contradicting(RoomFingerprint stored) =>
+            new(available: true, () => Reading(stored with
+            {
+                WifiFeatureHash = "wifi-somewhere-else",
+                MagneticVector = -stored.MagneticVector,
+                PressureHpa = stored.PressureHpa + 40f,
+                AmbientLightVector = stored.AmbientLightVector * 64f,
+            }));
+
+        private static FingerprintReading Reading(RoomFingerprint fingerprint) =>
+            new(fingerprint,
+                [new FingerprintSignal("Wi-Fi neighbourhood", "8 access points, hashed", true)],
+                DateTimeOffset.Now);
+
+        public bool IsAvailable { get; } = available;
+
+        public string Summary => IsAvailable ? "Room signals: test" : "No ambient sensors on this device";
+
+        public Task<FingerprintReading> ReadAsync(CancellationToken ct) =>
+            Task.FromResult(read?.Invoke() ?? FingerprintReading.Unavailable);
     }
 }
