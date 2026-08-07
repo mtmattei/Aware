@@ -40,7 +40,7 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Tests:** `tests/Aware.Tests`, **91 tests**, all passing, ~4 s. Covers the Projection, Hit
+- **Tests:** `tests/Aware.Tests`, **108 tests**, all passing, ~4 s. Covers the Projection, Hit
   testing, Recognition and Actions blocks of `tests/TEST-CHECKLIST.md` and
   `08-ACCESSIBILITY-TESTS.md`, plus `PersistenceTests` round-tripping the model through the
   source-generated context. Verified the suite bites twice over: reversing the hit-buffer walk
@@ -53,25 +53,60 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
   the device correctly refused to confirm a room it is not in. That measurement was right; the
   way it was *displayed* was the bug, now fixed (see "Two confidences" below). **The device has
   not been re-tested since.**
-- **Git:** `main`, nine commits, working tree clean. Latest: `713bf3f`.
+- **Git:** `main`, working tree clean. Latest: `aeadc56`.
+
+## Recognition-only rooms — in progress (2026-08-07)
+
+`SPEC.md` step 7 was the ask; steps 1, 2, 4, 5 and 7 are **built and verified**, leaving
+3 (locator tests — done), 6 (room list) and 8 (unmodelled viewport).
+
+A user can now set up the room they are standing in: **Add this place** names it, stores an
+ambient fingerprint and no geometry, and on relaunch `IRoomLocator` scores one reading
+against every stored room and opens the best match. The sample garage is only the fallback.
+
+Desktop acceptance test **passes** (`AWARE_SIMULATE_SENSORS`):
+
+| mode | result |
+|---|---|
+| `1`, fresh | garage, `98% confident · not linked to a place yet`, both buttons |
+| create "Place A" | opens it, `No model yet · you are here · 4 signals match` |
+| restart, `1` | **Place A opens automatically** |
+| restart, `elsewhere` | Place A does *not* open; garage fallback + Add this place |
+
+Pixel 8 got steps 1/2/7 only — created a real "Kitchen" reading
+`No model yet · you are here · 3 signals match`. **The locator commit never reached the
+device** (it disconnected mid-deploy), so on the phone a relaunch still opens the garage.
+Redeploy `net10.0-android` to finish that.
+
+**Not built, and visible:** an unmodelled room's viewport is empty rather than drawing the
+floor plate, and Measure/Memories are still enabled on a room with nothing to measure. Both
+are step 8.
+
+**Left on desktop:** a "Place A" room in LocalState from the acceptance run.
 
 ## Next actions (in order)
 
-1. **Confirm the link flow on the Pixel 8 with real sensors.** All four states are verified on
+1. **Redeploy Android** so the phone gets the locator, then confirm the Kitchen opens by
+   itself: carry the phone out of that room, relaunch, confirm it does *not* open, walk back,
+   confirm it does. This is the one thing desktop simulation cannot stand in for.
+2. **SPEC step 8** — floor plate for an unmodelled room, disabled lenses with help text.
+   Currently an empty viewport, which reads as broken rather than as "shape unknown".
+3. **SPEC step 6** — the room list, so more than one real room is reachable.
+4. **Confirm the link flow on the Pixel 8 with real sensors.** All four states are verified on
    desktop through the simulated provider (below), so this is confirmation against real
    hardware, not first contact. Delete the app's stored room first or reinstall: a room saved
    before `e1c49a5` still carries the old invented fingerprint and will keep reporting a
    contradiction, which looks like the fix did not take.
-2. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
+5. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
    of the height, because a 1.6:1 projected room cannot fill a 1:2.2 viewport. With the tray
    open it reads well (the gaps above and below the model are near-equal); with nothing
    selected the lower band is empty, reserved for the tray. If that reads as too sparse, the
    real fix is a lower camera elevation on narrow viewports, which makes the room taller in
    projection — not cropping.
-3. **Bluetooth is the one unread signal.** `BluetoothFeatureHash` is still empty — a BLE scan
+6. **Bluetooth is the one unread signal.** `BluetoothFeatureHash` is still empty — a BLE scan
    needs an async callback and the `BLUETOOTH_SCAN` permission, which is why it was left out of
    the first pass. It would add a fifth signal to the match.
-4. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
+7. **Real sensors, geometry half.** Camera pose and depth need ARCore, and the .NET binding
    story is the unknown — likely a binding project. The Pixel 8 supports the ARCore Depth API
    through motion stereo despite having no ToF, so hardware is not the blocker.
 
