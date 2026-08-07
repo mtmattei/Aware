@@ -23,9 +23,12 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **WebAssembly runtime: verified in Chrome.** `SKCanvasElement` renders the full model,
   recognition and progressive assembly run, navigation resolves the `Room` route, hit testing
   and the tray work, `LocalSettings` persists the onboarding flag across reloads, and the
-  bundled serif resolves. Android and iOS are **build-verified only** — no emulator or device
-  is available on this machine (`emulator -list-avds` is empty).
-- **Runtime:** verified by launching the Release exe and driving it with synthesized input,
+  bundled serif resolves.
+- **Android runtime: verified on a physical Pixel 8 (Android 17).** Full model renders, touch
+  selection and the tray work, drag-to-orbit is correctly distinguished from a tap and
+  preserves selection, the correction sheet and its soft keyboard behave, and the drawn
+  evidence markers render. iOS remains **build-verified only** — no Mac or device.
+- **Desktop runtime:** verified by launching the Release exe and driving it with synthesized input,
   captured via `PrintWindow(PW_RENDERFULLCONTENT)`. Confirmed: progressive assembly
   (shell → furniture, message and geometry in step); orbit drag + inertia; keyboard orbit and
   Home reset; tap-to-select with sage selection material; empty-space tap clears; lens switch
@@ -37,17 +40,19 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 - **App MCP:** not available this session — the project `.mcp.json` only loads from the
   session root, and this session was rooted in the briefs folder. A session started in
   `C:\Users\Platform006\Aware` would get `uno_app_start` and the peer tools.
-- **Git:** not a repository yet. Nothing committed.
+- **Git:** `main`, four commits, working tree clean.
 
 ## Next actions (in order)
 
 1. Stand up `Aware.Tests` and automate `tests/TEST-CHECKLIST.md`. The projection, hit-testing
    and recognition cases are all pure functions of `Math3D`, `SpatialRoomRenderer.HitTest` and
    `RenderSnapshotFactory` — cheap to cover, and currently zero coverage.
-2. Run Android on a device or emulator. It builds clean but has never executed, and it is the
-   target the 390 × 844 design reference was written for. Install an AVD first — there is none
-   on this machine. Watch for touch drag against the 7 px tap slop, which was tuned with a
-   mouse, and for `InputPane`/soft-keyboard behaviour in the correction sheet.
+2. Decide the portrait framing. On the Pixel the model fills 88% of the width but only ~24%
+   of the height, because a 1.6:1 projected room cannot fill a 1:2.2 viewport. With the tray
+   open it reads well (the gaps above and below the model are near-equal); with nothing
+   selected the lower band is empty, reserved for the tray. If that reads as too sparse, the
+   real fix is a lower camera elevation on narrow viewports, which makes the room taller in
+   projection — not cropping.
 3. Phase 2 capture: implement `ISpatialCaptureAdapter` for one real tier. The boundary and the
    simulation tier exist; nothing native sits behind them.
 
@@ -66,7 +71,7 @@ regardless of yaw, and hit-tests axis-aligned bounding boxes.
 
 ## Cross-platform pass — what it caught
 
-Three real defects that desktop alone would never have surfaced:
+Five real defects that desktop alone would never have surfaced:
 
 - **`System.Text.Json` reflection would have broken WebAssembly under trimming.** Six IL2026
   warnings on the WASM build. Persistence worked in Debug and would have failed in a published
@@ -81,6 +86,13 @@ Three real defects that desktop alone would never have surfaced:
   (U+25CF / U+25CB); the Roboto that Material ships is latin-subset and has none. Now drawn as
   a `Border` — filled circle, hollow circle, filled square — so they carry no font dependency
   and still distinguish observed / inferred / corrected without relying on colour.
+- **The Android soft keyboard covered the field it was editing.** The page declared
+  `SafeArea.Insets="VisibleBounds"`, which does not include the keyboard, so the bottom-anchored
+  correction sheet stayed put and the IME sat on top of its own text box. Now
+  `"VisibleBounds,SoftInput"`.
+- **The transient object label collided with the correction sheet** at phone width, showing
+  through the tray. It is hidden while the tray is in correction mode, where the object is
+  already named by the field being edited.
 
 ## Open questions
 
@@ -93,6 +105,15 @@ Three real defects that desktop alone would never have surfaced:
 ```powershell
 cd C:\Users\Platform006\Aware
 dotnet build Aware/Aware.csproj -f net10.0-desktop -c Release
+
+# Android on a device. JAVA_HOME on this machine points at a JDK 11 that is
+# no longer installed, so the Android tooling needs it overridden per-shell.
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.16.8-hotspot"
+dotnet build Aware/Aware.csproj -f net10.0-android -c Debug -t:Run
+adb exec-out screencap -p > shot.png     # adb input tap/swipe drives it
+
+# WebAssembly, serves on http://localhost:5000/
+dotnet run --project Aware/Aware.csproj -f net10.0-browserwasm -c Debug
 
 # Preferred: start a session rooted here so .mcp.json registers the uno-app server,
 # then launch with uno_app_start instead of the exe.

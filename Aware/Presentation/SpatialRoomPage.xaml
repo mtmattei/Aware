@@ -167,7 +167,10 @@
                     AutomationProperties.Name="Spatial room model"
                     AutomationProperties.HelpText="Drag to orbit. Tap an object to select it. Arrow keys orbit, Home resets the view." />
 
-    <Grid utu:SafeArea.Insets="VisibleBounds">
+    <!-- SoftInput as well as VisibleBounds: without it the soft keyboard covers
+         the correction sheet's own text field on Android, since the tray is
+         bottom-anchored and nothing else moves it. -->
+    <Grid utu:SafeArea.Insets="VisibleBounds,SoftInput">
 
       <!-- 2. Room title and confidence -->
       <StackPanel Margin="20,20,20,0"
@@ -277,6 +280,7 @@
       <!-- 5. Transient object label -->
       <Border x:Name="ObjectLabel"
               Margin="0,0,26,26"
+              Visibility="{Binding TrayMode, Converter={StaticResource EnumVisibility}, ConverterParameter=Actions}"
               HorizontalAlignment="Right"
               Padding="14,8"
               Opacity="0"
