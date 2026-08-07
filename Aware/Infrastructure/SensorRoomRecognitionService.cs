@@ -10,13 +10,16 @@ namespace Aware.Infrastructure;
 ///
 /// <para>The four stages from 02-UX-FLOWS still pace the reconstruction, because
 /// they describe geometry assembling rather than sensing. What changes is that
-/// the confidence and the closing message come from a real comparison between
-/// the stored fingerprint and a live reading, so matching signals raise
-/// confidence and contradictions lower it (08-ACCESSIBILITY-TESTS).</para>
+/// the closing message reports a real comparison between the stored fingerprint
+/// and a live reading, so matching signals raise the match and contradictions
+/// lower it (08-ACCESSIBILITY-TESTS).</para>
 ///
-/// <para>Where no sensors exist — desktop, the browser — the stored confidence
-/// stands in and the experience is identical. That is the capability-tier
-/// promise in the README: only the input changes.</para>
+/// <para>Model confidence and place match are deliberately kept apart; the
+/// wording and the reasoning live in <see cref="RecognitionMessages"/>.</para>
+///
+/// <para>Where no sensors exist — desktop, the browser — there is no place
+/// question to answer and the line is the brief's exactly. That is the
+/// capability-tier promise in the README: only the input changes.</para>
 /// </summary>
 public sealed class SensorRoomRecognitionService : IRoomRecognitionService
 {
@@ -61,20 +64,24 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
         var live = await reading;
         LastReading = live;
 
-        var comparison = live.HasAnySignal
-            ? _matcher.Compare(room.Fingerprint, live)
+        // A comparison needs both halves. Sensors with no stored fingerprint is
+        // not a mismatch, it is an unlinked room, and scoring it would manufacture
+        // a contradiction out of nothing.
+        var comparison = live.HasAnySignal && room.Fingerprint is { } stored
+            ? _matcher.Compare(stored, live)
             : null;
         LastComparison = comparison;
 
+        var canLink = live.HasAnySignal && room.Fingerprint is null;
+
         await Task.Delay(TimeSpan.FromMilliseconds(1100 * scale), ct);
-        yield return new RecognitionState(MatchingMessage(comparison), .71f, .88f, false);
+        yield return new RecognitionState(RecognitionMessages.Matching(comparison), .71f, .88f, false);
 
         await Task.Delay(TimeSpan.FromMilliseconds(1200 * scale), ct);
 
-        // With no sensors the stored confidence is the honest answer; with them,
-        // the measured one is.
-        var confidence = comparison?.Confidence ?? room.Confidence;
-        yield return new RecognitionState(SettledMessage(confidence, comparison), 1f, confidence, true);
+        // The model's own confidence, unchanged by where the device is standing.
+        yield return new RecognitionState(
+            RecognitionMessages.Settled(room.Confidence, comparison, canLink), 1f, room.Confidence, true);
     }
 
     private async Task<FingerprintReading> ReadAsync(CancellationToken ct)
@@ -97,36 +104,4 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
             return FingerprintReading.Unavailable;
         }
     }
-
-    private static string MatchingMessage(FingerprintComparison? comparison)
-    {
-        if (comparison is null) return "Known objects matching";
-
-        return comparison.Agreements.Count switch
-        {
-            0 => "Known objects matching · no signal agrees yet",
-            1 => $"Known objects matching · {comparison.Agreements[0].ToLowerInvariant()} agrees",
-            _ => $"Known objects matching · {comparison.Agreements.Count} signals agree",
-        };
-    }
-
-    private static string SettledMessage(float confidence, FingerprintComparison? comparison)
-    {
-        var percent = $"{confidence * 100:0}% confident";
-
-        if (comparison is null) return $"{percent} · stable room model";
-
-        if (comparison.Contradictions.Count > 0 && !comparison.IsRecognized)
-            return $"{percent} · {comparison.Contradictions[0].ToLowerInvariant()} disagrees";
-
-        return $"{percent} · {Describe(comparison.Agreements)}";
-    }
-
-    private static string Describe(IReadOnlyList<string> agreements) =>
-        agreements.Count switch
-        {
-            0 => "no matching signals",
-            1 => $"{agreements[0].ToLowerInvariant()} matches",
-            _ => $"{agreements.Count} signals match",
-        };
 }

@@ -20,6 +20,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     private readonly IRoomRepository _rooms;
     private readonly IRoomRecognitionService _recognition;
+    private readonly IFingerprintMatcher _matcher;
     private readonly IRenderSnapshotFactory _snapshots;
     private readonly IObjectActionResolver _actions;
     private readonly ISpatialCaptureAdapter _capture;
@@ -47,6 +48,13 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int onboardingStep;
     [ObservableProperty] private bool isObjectListVisible;
 
+    /// <summary>
+    /// True when the device senses a place but this room is not tied to one yet.
+    /// Drives the Link affordance; false on desktop and the browser, where there
+    /// is nothing to link with.
+    /// </summary>
+    [ObservableProperty] private bool canLinkPlace;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTrayOpen))]
     [NotifyPropertyChangedFor(nameof(SelectedObjectName))]
@@ -59,6 +67,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     public SpatialRoomViewModel(
         IRoomRepository rooms,
         IRoomRecognitionService recognition,
+        IFingerprintMatcher matcher,
         IRenderSnapshotFactory snapshots,
         IObjectActionResolver actions,
         ISpatialCaptureAdapter capture,
@@ -70,6 +79,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     {
         _rooms = rooms;
         _recognition = recognition;
+        _matcher = matcher;
         _snapshots = snapshots;
         _actions = actions;
         _capture = capture;
@@ -171,6 +181,36 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
             RecognitionProgress = state.Progress;
             IsRoomStable = state.IsStable;
         }
+
+        // Only offered once recognition has settled, so the reading it would store
+        // is the one the user just watched being taken.
+        CanLinkPlace = _room is { Fingerprint: null }
+                       && _recognition.LastReading is { HasAnySignal: true };
+    }
+
+    /// <summary>
+    /// Ties this model to the place the device is standing in, using the reading
+    /// recognition already took. Geometry and every object ID are untouched.
+    /// </summary>
+    [RelayCommand]
+    private async Task LinkPlaceAsync()
+    {
+        if (_room is null) return;
+        if (_recognition.LastReading is not { HasAnySignal: true } reading) return;
+
+        _room = _room.LinkedTo(reading.Fingerprint);
+        await _rooms.SaveRoomAsync(_room, _lifetime.Token);
+
+        CanLinkPlace = false;
+
+        // Scored rather than asserted: comparing the reading against itself is a
+        // real match, and it words itself the same way every later arrival will.
+        var comparison = _matcher.Compare(reading.Fingerprint, reading);
+        RecognitionMessage = RecognitionMessages.Settled(_room.Confidence, comparison, canLink: false);
+
+        StatusMessage = $"{_room.Name} is linked to this place. " +
+                        "Aware will recognize it from here on, and say so when you are somewhere else.";
+        _haptics.Play(HapticKind.Confirm);
     }
 
     private static RoomId SampleGarageFactoryId => new("room-garage-001");

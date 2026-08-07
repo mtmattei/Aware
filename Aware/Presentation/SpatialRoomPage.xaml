@@ -172,29 +172,46 @@
          bottom-anchored and nothing else moves it. -->
     <Grid utu:SafeArea.Insets="VisibleBounds,SoftInput">
 
-      <!-- 2. Room title and confidence -->
+      <!-- 2. Room title and confidence.
+           The text keeps its own IsHitTestVisible="False" group, unchanged, so a
+           drag starting over the title still orbits the model. The outer panel
+           only exists to stack the Link button under it and carries no Background,
+           which leaves it transparent to pointer events. -->
       <StackPanel Margin="20,20,20,0"
                   VerticalAlignment="Top"
-                  Spacing="5"
-                  IsHitTestVisible="False">
-        <local:TrackedText Text="SPATIAL FINGERPRINT"
-                           TextStyle="{StaticResource AwareEyebrowTextStyle}" />
+                  HorizontalAlignment="Left"
+                  Spacing="5">
 
-        <TextBlock Text="{Binding RoomName}"
-                   Style="{StaticResource AwarePlaceTitleTextStyle}" />
+        <StackPanel Spacing="5" IsHitTestVisible="False">
+          <local:TrackedText Text="SPATIAL FINGERPRINT"
+                             TextStyle="{StaticResource AwareEyebrowTextStyle}" />
 
-        <TextBlock Text="{Binding RecognitionMessage}"
-                   Style="{StaticResource AwareSupportTextStyle}"
-                   AutomationProperties.LiveSetting="Polite" />
+          <TextBlock Text="{Binding RoomName}"
+                     Style="{StaticResource AwarePlaceTitleTextStyle}" />
 
-        <ProgressBar Value="{Binding RecognitionProgress}"
-                     Maximum="1"
-                     Height="2"
-                     Margin="0,4,0,0"
-                     MaxWidth="180"
-                     HorizontalAlignment="Left"
-                     Foreground="{StaticResource AwareSelectionDarkBrush}"
-                     Background="{StaticResource AwareModelRearBrush}" />
+          <TextBlock Text="{Binding RecognitionMessage}"
+                     Style="{StaticResource AwareSupportTextStyle}"
+                     AutomationProperties.LiveSetting="Polite" />
+
+          <ProgressBar Value="{Binding RecognitionProgress}"
+                       Maximum="1"
+                       Height="2"
+                       Margin="0,4,0,0"
+                       MaxWidth="180"
+                       HorizontalAlignment="Left"
+                       Foreground="{StaticResource AwareSelectionDarkBrush}"
+                       Background="{StaticResource AwareModelRearBrush}" />
+        </StackPanel>
+
+        <!-- Only where the device senses a place and this room has none. -->
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Link to this place"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Left"
+                Command="{Binding LinkPlaceCommand}"
+                Visibility="{Binding CanLinkPlace, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="Link this room to the place you are in"
+                AutomationProperties.HelpText="Stores the ambient signals around you so Aware can recognize this room later." />
       </StackPanel>
 
       <!-- Utility toggles -->

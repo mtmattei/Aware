@@ -54,13 +54,12 @@ public static class SampleGarageFactory
             .98f,
             ModelVersion: 7,
             LastObservedAt: now,
-            new RoomFingerprint(
-                WifiFeatureHash: "wifi-9f2c41",
-                BluetoothFeatureHash: "bt-4ad0e7",
-                AmbientLightVector: new Vector3(.4f, .8f, .2f),
-                MagneticVector: new Vector3(.12f, -.44f, .61f),
-                PressureHpa: 1008f,
-                AcousticEmbeddingId: "acoustic-garage-07"),
+            // Deliberately unlinked. The earlier seed carried invented signal values,
+            // so a device with real sensors scored the sample against a place that
+            // never existed and reported a contradiction — a correct measurement of
+            // fiction, which reads as a broken app. An unlinked room says the honest
+            // thing instead, and the user can link it to wherever they are.
+            Fingerprint: null,
             shell,
             objects,
             projects);

@@ -115,14 +115,24 @@ public sealed record SpatialRoom(
     RoomId Id,
     string Name,
     string Type,
+    // How sure the app is of this geometry. Distinct from whether the device is
+    // currently standing in the place; that comparison lives against Fingerprint.
     float Confidence,
     int ModelVersion,
     DateTimeOffset LastObservedAt,
-    RoomFingerprint Fingerprint,
+    // The ambient signature of the physical place this model was built in, or
+    // null when the model has never been linked to one. A seeded or imported room
+    // starts null: inventing a fingerprint makes the device report a contradiction
+    // against a place that was never measured.
+    RoomFingerprint? Fingerprint,
     IReadOnlyList<SpatialPrimitive> Shell,
     IReadOnlyList<SpatialObject> Objects,
     IReadOnlyList<SpatialProject> Projects)
 {
+    /// <summary>True once this model has been linked to a physical place.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsLinkedToPlace => Fingerprint is not null;
+
     public SpatialObject? FindObject(SpatialObjectId id) =>
         Objects.FirstOrDefault(o => o.Id == id);
 
@@ -141,4 +151,16 @@ public sealed record SpatialRoom(
 
     public SpatialRoom WithoutObject(SpatialObjectId id) =>
         this with { Objects = Objects.Where(o => o.Id != id).ToArray() };
+
+    /// <summary>
+    /// Binds this model to the place the device is standing in right now. Geometry,
+    /// objects and every ID are untouched: linking says where the room is, not what
+    /// is in it.
+    /// </summary>
+    public SpatialRoom LinkedTo(RoomFingerprint fingerprint) =>
+        this with { Fingerprint = fingerprint };
+
+    /// <summary>Releases the link without touching the model (07-DATA-PRIVACY).</summary>
+    public SpatialRoom Unlinked() =>
+        this with { Fingerprint = null };
 }

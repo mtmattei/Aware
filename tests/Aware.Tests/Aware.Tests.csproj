@@ -42,8 +42,10 @@
     <Compile Include="..\..\Aware\Application\ObjectActionResolver.cs" Link="Linked\Application\ObjectActionResolver.cs" />
     <Compile Include="..\..\Aware\Application\IRoomFingerprintProvider.cs" Link="Linked\Application\IRoomFingerprintProvider.cs" />
     <Compile Include="..\..\Aware\Application\FingerprintMatcher.cs" Link="Linked\Application\FingerprintMatcher.cs" />
+    <Compile Include="..\..\Aware\Application\RecognitionMessages.cs" Link="Linked\Application\RecognitionMessages.cs" />
 
     <Compile Include="..\..\Aware\Infrastructure\SampleGarageFactory.cs" Link="Linked\Infrastructure\SampleGarageFactory.cs" />
+    <Compile Include="..\..\Aware\Infrastructure\SpatialJson.cs" Link="Linked\Infrastructure\SpatialJson.cs" />
     <Compile Include="..\..\Aware\Infrastructure\SensorRoomRecognitionService.cs" Link="Linked\Infrastructure\SensorRoomRecognitionService.cs" />
 
     <Compile Include="..\..\Aware\Platform\IMotionSettings.cs" Link="Linked\Platform\IMotionSettings.cs" />

@@ -16,6 +16,20 @@ public class RoomModelTests
 {
     private static SpatialRoom Room() => SampleGarageFactory.Create();
 
+    /// <summary>
+    /// A room that has been linked to a place. The seeded sample deliberately is
+    /// not, so anything testing the comparison has to link one first.
+    /// </summary>
+    private static SpatialRoom LinkedRoom() => Room().LinkedTo(TestFingerprint);
+
+    private static readonly RoomFingerprint TestFingerprint = new(
+        WifiFeatureHash: "wifi-test-0001",
+        BluetoothFeatureHash: "bt-test-0001",
+        AmbientLightVector: new Vector3(120f, 0f, 0f),
+        MagneticVector: new Vector3(.12f, -.44f, .61f),
+        PressureHpa: 1008f,
+        AcousticEmbeddingId: null);
+
     // -- stable identity ---------------------------------------------------
 
     [Fact]
@@ -223,26 +237,103 @@ public class RoomModelTests
     [Fact]
     public async Task MatchingSignalsProduceHighConfidence()
     {
-        var room = Room();
-        var recognizer = Recognizer(FakeFingerprints.Matching(room.Fingerprint));
+        var room = LinkedRoom();
+        var recognizer = Recognizer(FakeFingerprints.Matching(TestFingerprint));
 
         var final = await FinalState(recognizer, room);
 
-        Assert.True(final.Confidence > .9f,
-            $"A live reading identical to the stored room should be recognized, got {final.Confidence}.");
+        Assert.True(recognizer.LastComparison!.Confidence > .9f,
+            $"A live reading identical to the stored room should be recognized, " +
+            $"got {recognizer.LastComparison.Confidence}.");
+        Assert.Contains("you are here", final.Message);
         Assert.Contains("match", final.Message);
     }
 
     [Fact]
     public async Task ContradictingSignalsLowerConfidence()
     {
-        var room = Room();
-        var recognizer = Recognizer(FakeFingerprints.Contradicting(room.Fingerprint));
+        var room = LinkedRoom();
+        var recognizer = Recognizer(FakeFingerprints.Contradicting(TestFingerprint));
 
         var final = await FinalState(recognizer, room);
 
-        Assert.True(final.Confidence < .4f,
-            $"A reading from a different room should not be recognized, got {final.Confidence}.");
+        Assert.True(recognizer.LastComparison!.Confidence < .4f,
+            $"A reading from a different room should not be recognized, " +
+            $"got {recognizer.LastComparison.Confidence}.");
+        Assert.Contains("you are somewhere else", final.Message);
+    }
+
+    /// <summary>
+    /// The regression this exists to prevent. Place match and model confidence
+    /// used to share one number, so walking into another room made the app report
+    /// that it had lost faith in geometry it had never stopped being sure of.
+    /// </summary>
+    [Fact]
+    public async Task StandingInADifferentRoomDoesNotLowerModelConfidence()
+    {
+        var room = LinkedRoom();
+        var recognizer = Recognizer(FakeFingerprints.Contradicting(TestFingerprint));
+
+        var final = await FinalState(recognizer, room);
+
+        Assert.Equal(room.Confidence, final.Confidence, precision: 3);
+        Assert.Contains($"{room.Confidence * 100:0}% confident", final.Message);
+    }
+
+    [Fact]
+    public void TheSeededSampleShipsUnlinkedToAnyPlace()
+    {
+        var room = Room();
+
+        Assert.Null(room.Fingerprint);
+        Assert.False(room.IsLinkedToPlace);
+    }
+
+    /// <summary>
+    /// Sensors present, nothing stored to compare against: an unlinked room, which
+    /// is not the same as a mismatched one and must not be worded like one.
+    /// </summary>
+    [Fact]
+    public async Task AnUnlinkedRoomReportsNoPlaceRatherThanAContradiction()
+    {
+        var room = Room();
+        var recognizer = Recognizer(FakeFingerprints.Matching(TestFingerprint));
+
+        var final = await FinalState(recognizer, room);
+
+        Assert.Null(recognizer.LastComparison);
+        Assert.Contains("not linked to a place", final.Message);
+        Assert.DoesNotContain("disagree", final.Message);
+        Assert.DoesNotContain("somewhere else", final.Message);
+        Assert.Equal(room.Confidence, final.Confidence, precision: 3);
+    }
+
+    /// <summary>Desktop and the browser keep the brief's line exactly (02-UX-FLOWS).</summary>
+    [Fact]
+    public async Task WithNoSensorsTheLineIsTheBriefs()
+    {
+        var final = await FinalState(Recognizer(FakeFingerprints.None), Room());
+
+        Assert.Equal("98% confident · stable room model", final.Message);
+    }
+
+    [Fact]
+    public void LinkingARoomToAPlaceLeavesTheModelUntouched()
+    {
+        var before = Room();
+        var after = before.LinkedTo(TestFingerprint);
+
+        Assert.Equal(TestFingerprint, after.Fingerprint);
+        Assert.True(after.IsLinkedToPlace);
+
+        // Linking says where the room is, not what is in it.
+        Assert.Equal(before.Confidence, after.Confidence);
+        Assert.Equal(
+            before.Objects.Select(o => o.Id),
+            after.Objects.Select(o => o.Id));
+        Assert.Equal(before.Shell.Count, after.Shell.Count);
+
+        Assert.Null(after.Unlinked().Fingerprint);
     }
 
     [Fact]

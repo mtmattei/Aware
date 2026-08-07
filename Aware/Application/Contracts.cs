@@ -23,6 +23,13 @@ public interface IRoomRecognitionService
     IAsyncEnumerable<RecognitionState> RecognizeAsync(
         SpatialRoom room,
         CancellationToken ct);
+
+    /// <summary>
+    /// The most recent live reading, or null where the device senses nothing.
+    /// Exposed so an unlinked room can be linked to the place that was just
+    /// measured, without reading the sensors a second time.
+    /// </summary>
+    FingerprintReading? LastReading { get; }
 }
 
 public interface IRenderSnapshotFactory
