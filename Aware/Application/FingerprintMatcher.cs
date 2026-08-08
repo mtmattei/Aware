@@ -26,8 +26,8 @@ public sealed class FingerprintMatcher : IFingerprintMatcher
     // Magnetic magnitude is second and is the most reliable single number the
     // device produces. Pressure and light are deliberately small: both drift for
     // reasons that have nothing to do with which room you are in.
-    private const float BluetoothWeight = .45f;
-    private const float MagneticWeight = .35f;
+    private const float BluetoothWeight = .50f;
+    private const float MagneticWeight = .30f;
     private const float PressureWeight = .10f;
     private const float LightWeight = .10f;
     private const float WifiWeight = .45f;
@@ -42,11 +42,21 @@ public sealed class FingerprintMatcher : IFingerprintMatcher
     private const float PressureToleranceHpa = 6f;
 
     /// <summary>
-    /// Field strength in microtesla. Two rooms in one home measured 46.2 and 21.3;
-    /// the same room measured 46.2 and 45.5 thirteen minutes apart in different
-    /// orientations. 10 keeps that pair together and those two rooms apart.
+    /// Field strength in microtesla, and deliberately loose.
+    ///
+    /// <para>Four readings in one kitchen measured 46.2, 45.5, 46.5 and 34.5 — a
+    /// spread of 11.7 within a single room, because standing a step closer to an
+    /// appliance moves the field as much as changing rooms does. A tolerance tight
+    /// enough to separate rooms on magnetism alone therefore makes a room fail to
+    /// recognize itself, which is the worse error: the app would sit in your
+    /// kitchen insisting you were somewhere else.</para>
+    ///
+    /// <para>Bluetooth is the discriminator now, so this only has to avoid
+    /// contradicting a room the set signal already agreed about. 20 covers the
+    /// measured within-room spread while still scoring zero against the other
+    /// room in the same home, which read 21.3.</para>
     /// </summary>
-    private const float MagneticToleranceMicrotesla = 10f;
+    private const float MagneticToleranceMicrotesla = 20f;
 
     public FingerprintComparison Compare(RoomFingerprint stored, FingerprintReading live)
     {
@@ -62,7 +72,7 @@ public sealed class FingerprintMatcher : IFingerprintMatcher
         Score(WifiWeight, HashSimilarity(stored.WifiFeatureHash, live.Fingerprint.WifiFeatureHash),
             "Wi-Fi neighbourhood", ref score, ref weight, agreements, contradictions);
 
-        Score(BluetoothWeight, HashSimilarity(stored.BluetoothFeatureHash, live.Fingerprint.BluetoothFeatureHash),
+        Score(BluetoothWeight, SetSimilarity(stored.BluetoothFeatureHash, live.Fingerprint.BluetoothFeatureHash),
             "Bluetooth neighbourhood", ref score, ref weight, agreements, contradictions);
 
         Score(MagneticWeight, MagneticSimilarity(stored.MagneticVector, live.Fingerprint.MagneticVector),
@@ -98,9 +108,51 @@ public sealed class FingerprintMatcher : IFingerprintMatcher
     }
 
     /// <summary>
+    /// Overlap between two sets of individually hashed identifiers, as
+    /// intersection over union.
+    ///
+    /// <para>A single hash over the whole set was measured failing on a Pixel 8:
+    /// the same kitchen produced <c>bt-2a3efbaf95b7</c> and, four minutes later,
+    /// <c>bt-dd614e160991</c>. Bluetooth advertisers come and go between scans, so
+    /// one device sleeping changed the whole blob and the room stopped recognizing
+    /// itself. Comparing the sets instead means losing one advertiser of five
+    /// costs 0.2, not everything.</para>
+    ///
+    /// <para>Each identifier is still hashed on its own before it is stored, so
+    /// nothing here is a device name (07-DATA-PRIVACY) — only opaque tokens whose
+    /// overlap can be counted.</para>
+    /// </summary>
+    private static float? SetSimilarity(string stored, string live)
+    {
+        if (string.IsNullOrEmpty(stored) || string.IsNullOrEmpty(live)) return null;
+
+        var a = stored.Split(FingerprintSetSeparator, StringSplitOptions.RemoveEmptyEntries);
+        var b = live.Split(FingerprintSetSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+        if (a.Length == 0 || b.Length == 0) return null;
+
+        var left = new HashSet<string>(a, StringComparer.Ordinal);
+        var right = new HashSet<string>(b, StringComparer.Ordinal);
+
+        var union = new HashSet<string>(left, StringComparer.Ordinal);
+        union.UnionWith(right);
+
+        left.IntersectWith(right);
+
+        return union.Count == 0 ? null : (float)left.Count / union.Count;
+    }
+
+    /// <summary>
+    /// Separates the per-device hashes inside a neighbourhood fingerprint. Shared
+    /// with the platform providers that build them.
+    /// </summary>
+    public const char FingerprintSetSeparator = '+';
+
+    /// <summary>
     /// Hashes are opaque by design (07-DATA-PRIVACY stores hashes, not device or
     /// network names), so this is necessarily a match / no-match rather than a
-    /// degree. Shared by the Wi-Fi and Bluetooth neighbourhoods.
+    /// degree. Still used for Wi-Fi, which is a single blob hash — and which
+    /// contributes nothing on Android 13+ anyway.
     /// </summary>
     private static float? HashSimilarity(string stored, string live)
     {

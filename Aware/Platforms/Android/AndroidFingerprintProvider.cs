@@ -359,9 +359,19 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
             var names = collector.Strongest(BluetoothDevicesHashed);
             if (names.Count == 0) return (null, 0, "No named devices in range");
 
-            var digest = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('|', names)));
+            // One hash per device, joined — not a single hash over the set.
+            // Measured on a Pixel 8: hashing the set as a blob gave this kitchen
+            // two different fingerprints four minutes apart, because advertisers
+            // drop in and out between scans. Per-device tokens let the matcher
+            // score partial overlap instead of treating one absent speaker as a
+            // different room. Each name is still hashed before it is stored, so
+            // no device name is retained (07-DATA-PRIVACY).
+            var tokens = names.Select(HashIdentifier);
 
-            return ($"bt-{Convert.ToHexString(digest)[..12].ToLowerInvariant()}", names.Count, string.Empty);
+            return (
+                string.Join(FingerprintMatcher.FingerprintSetSeparator, tokens),
+                names.Count,
+                string.Empty);
         }
         catch (OperationCanceledException)
         {
@@ -382,6 +392,14 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
             }
         }
     }
+
+    /// <summary>
+    /// One short, opaque token per identifier. Truncated for the same reason the
+    /// Wi-Fi digest is: long enough to distinguish devices, too short to be worth
+    /// reversing, and readable in an exported model.
+    /// </summary>
+    private static string HashIdentifier(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..10].ToLowerInvariant();
 
     /// <summary>
     /// Collects advertised names and the strongest signal seen for each. Callbacks

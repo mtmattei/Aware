@@ -34,6 +34,16 @@ public class FieldMeasuredMatchTests
         magnetic: new Vector3(18.848999f, 13.297999f, -39.5036f),
         pressure: 1011.56805f);
 
+    /// <summary>
+    /// The same kitchen again at 23:00, the phone a step away from where the
+    /// earlier readings were taken. ‖B‖ = 34.5 µT — 11.7 from the others, which is
+    /// how much the field moves inside one room.
+    /// </summary>
+    private static readonly RoomFingerprint KitchenFromAcrossTheRoom = Measured(
+        light: 0.695f,
+        magnetic: new Vector3(2.7694f, 9.7112f, 33.0132f),
+        pressure: 1011.5381f);
+
     /// <summary>A different room the same evening. ‖B‖ = 21.3 µT.</summary>
     private static readonly RoomFingerprint OtherRoom = Measured(
         light: 10.648749f,
@@ -136,6 +146,83 @@ public class FieldMeasuredMatchTests
 
         Assert.False(result.IsRecognized);
         Assert.Contains("Bluetooth neighbourhood", result.Contradictions);
+    }
+
+    /// <summary>
+    /// The false negative this nearly shipped with. Standing a step away inside
+    /// the same kitchen moved the field 11.7 µT, which under the first tolerance
+    /// (10) made magnetism contradict the room outright. With the Bluetooth
+    /// neighbourhood agreeing, the room must still be recognized — an app that
+    /// insists you are elsewhere while you stand in your own kitchen is worse
+    /// than one that is merely unsure.
+    /// </summary>
+    [Fact]
+    public void TheKitchenIsStillTheKitchenFromAcrossTheRoom()
+    {
+        var stored = Kitchen with { BluetoothFeatureHash = "bt-2a3efbaf95b7" };
+        var live = KitchenFromAcrossTheRoom with { BluetoothFeatureHash = "bt-2a3efbaf95b7" };
+
+        var result = Matcher.Compare(stored, Live(live));
+
+        Assert.True(
+            result.IsRecognized,
+            $"the same room from a step away scored only {result.Confidence:0.00}");
+    }
+
+    /// <summary>
+    /// And the loosened tolerance must not buy that at the cost of the thing the
+    /// whole fix exists for: a different room, with a different Bluetooth
+    /// neighbourhood, still has to lose.
+    /// </summary>
+    [Fact]
+    public void TheLooserMagneticToleranceStillRejectsTheOtherRoom()
+    {
+        var stored = Kitchen with { BluetoothFeatureHash = "bt-2a3efbaf95b7" };
+        var live = OtherRoom with { BluetoothFeatureHash = "bt-000000000000" };
+
+        var result = Matcher.Compare(stored, Live(live));
+
+        Assert.False(
+            result.IsRecognized,
+            $"the other room still scored {result.Confidence:0.00}");
+    }
+
+    /// <summary>
+    /// The failure that made the kitchen stop opening even after Bluetooth was
+    /// added. On the device the same kitchen produced bt-2a3efbaf95b7 and, four
+    /// minutes later, bt-dd614e160991: advertisers drop in and out between scans,
+    /// and a single hash over the whole set turns one sleeping speaker into a
+    /// different room. Overlap has to be scored instead.
+    /// </summary>
+    [Fact]
+    public void OneAdvertiserDroppingOutDoesNotLoseTheRoom()
+    {
+        var stored = Kitchen with { BluetoothFeatureHash = "aa+bb+cc+dd+ee" };
+        // Same room, one device asleep and one new one awake.
+        var live = KitchenFromAcrossTheRoom with { BluetoothFeatureHash = "aa+bb+cc+dd+ff" };
+
+        var result = Matcher.Compare(stored, Live(live));
+
+        Assert.True(
+            result.IsRecognized,
+            $"a four-of-six overlap scored only {result.Confidence:0.00}");
+    }
+
+    /// <summary>
+    /// The other edge: sharing one incidental advertiser — a neighbour's TV heard
+    /// faintly through a wall — must not make two rooms the same room.
+    /// </summary>
+    [Fact]
+    public void SharingASingleAdvertiserIsNotTheSameRoom()
+    {
+        var stored = Kitchen with { BluetoothFeatureHash = "aa+bb+cc+dd" };
+        var live = OtherRoom with { BluetoothFeatureHash = "aa+ww+xx+yy" };
+
+        var result = Matcher.Compare(stored, Live(live));
+
+        Assert.False(
+            result.IsRecognized,
+            $"one shared device out of seven scored {result.Confidence:0.00}");
     }
 
     [Fact]
