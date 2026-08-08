@@ -207,6 +207,8 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         var reading = await ReadPlaceAsync(ct);
         var located = reading is null ? null : _locator.Locate(rooms, reading);
 
+        LogLocatorScores(rooms, reading, located);
+
         _room = located?.Room ?? seeded ?? rooms.FirstOrDefault();
 
         if (_room is null)
@@ -233,6 +235,48 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
         CanAddPlace = _fingerprints.IsAvailable;
         ApplyModelledState();
+    }
+
+    /// <summary>
+    /// Why this room opened and not another, as numbers.
+    ///
+    /// <para>"It keeps opening the garage" is unfalsifiable without the scores:
+    /// a room can lose because its signals genuinely disagree or because one
+    /// Bluetooth advertiser happened to be asleep during the scan, and those need
+    /// opposite fixes. Logged at Information so a `logcat | grep Locate` answers
+    /// it on any device, without a debugger attached.</para>
+    /// </summary>
+    private void LogLocatorScores(
+        IReadOnlyList<SpatialRoom> rooms,
+        FingerprintReading? reading,
+        RoomMatch? located)
+    {
+        if (reading is not { HasAnySignal: true })
+        {
+            _log.LogInformation("Locate: no usable reading; opening the fallback room.");
+            return;
+        }
+
+        foreach (var room in rooms)
+        {
+            if (room.Fingerprint is not { } stored)
+            {
+                _log.LogInformation("Locate: {Room} is not linked to a place.", room.Name);
+                continue;
+            }
+
+            var comparison = _matcher.Compare(stored, reading);
+
+            _log.LogInformation(
+                "Locate: {Room} scored {Score:0.000} ({Verdict}) · agree [{Agree}] · disagree [{Disagree}]",
+                room.Name,
+                comparison.Confidence,
+                comparison.IsRecognized ? "recognized" : "rejected",
+                string.Join(", ", comparison.Agreements),
+                string.Join(", ", comparison.Contradictions));
+        }
+
+        _log.LogInformation("Locate: opening {Room}.", located?.Room.Name ?? "the fallback room");
     }
 
     private void ApplyModelledState()

@@ -55,7 +55,7 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
     /// How long the BLE scan listens. Runs concurrently with the three sensor
     /// reads rather than after them, so it costs no extra launch time.
     /// </summary>
-    private const int BluetoothScanMs = 2500;
+    private const int BluetoothScanMs = 4000;
 
     /// <summary>Same reasoning as <see cref="AccessPointsHashed"/>.</summary>
     private const int BluetoothDevicesHashed = 8;
@@ -352,7 +352,17 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
             if (scanner is null) return (null, 0, "Bluetooth is off");
 
             collector = new LeScanCollector();
-            scanner.StartScan(collector);
+
+            // Low latency rather than the default power-saving mode: the default
+            // duty-cycles the radio, so a short scan sees only a fraction of the
+            // advertisers actually present and the set changes between scans. This
+            // room found two devices that way, which is few enough that missing
+            // one halves the overlap and loses the room.
+            var settings = new ScanSettings.Builder()!
+                .SetScanMode(Android.Bluetooth.LE.ScanMode.LowLatency)!
+                .Build();
+
+            scanner.StartScan(filters: null, settings: settings, callback: collector);
 
             await Task.Delay(BluetoothScanMs, ct);
 

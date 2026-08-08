@@ -26,8 +26,15 @@ public sealed class FingerprintMatcher : IFingerprintMatcher
     // Magnetic magnitude is second and is the most reliable single number the
     // device produces. Pressure and light are deliberately small: both drift for
     // reasons that have nothing to do with which room you are in.
-    private const float BluetoothWeight = .50f;
-    private const float MagneticWeight = .30f;
+    // Bluetooth carries almost all of it because it is the only signal measured
+    // to actually differ between rooms. Magnetism is kept at a nudge rather than
+    // dropped: on a Pixel 8 one kitchen read 46.2, 45.5, 46.5, 34.5 and 21.4 µT,
+    // a spread as wide as the gap to the next room, so at any real weight it drags
+    // correct matches down instead of discriminating. It scored the kitchen at
+    // 0.666 against a 0.6 bar with magnetism disagreeing — a margin thin enough
+    // that the room opened or did not open depending on the scan.
+    private const float BluetoothWeight = .70f;
+    private const float MagneticWeight = .10f;
     private const float PressureWeight = .10f;
     private const float LightWeight = .10f;
     private const float WifiWeight = .45f;
