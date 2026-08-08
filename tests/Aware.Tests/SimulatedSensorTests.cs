@@ -39,7 +39,8 @@ public class SimulatedSensorTests
 
         Assert.False(comparison.IsRecognized);
         Assert.Empty(comparison.Agreements);
-        Assert.Equal(4, comparison.Contradictions.Count);
+        // Five since Bluetooth joined the fingerprint as the sharp signal.
+        Assert.Equal(5, comparison.Contradictions.Count);
     }
 
     [Fact]

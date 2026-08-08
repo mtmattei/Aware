@@ -1,7 +1,12 @@
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
+using Android.Bluetooth;
+using Android.Bluetooth.LE;
 using Android.Content;
+// Both Android.Bluetooth.LE and Android.Net.Wifi define ScanResult, and this file
+// reads both radios.
+using LeScanResult = Android.Bluetooth.LE.ScanResult;
 using Android.Content.PM;
 using Android.Hardware;
 using Android.Net.Wifi;
@@ -38,7 +43,22 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
     /// install instead of once per launch. A declined permission asking again on
     /// every cold start is the behaviour this replaces.
     /// </summary>
-    private const string PermissionAskedKey = "aware.wifi.permission.asked";
+    /// <summary>
+    /// Versioned. The ask happens once per install, so widening the request to
+    /// include BLUETOOTH_SCAN needs a new key — otherwise every existing install
+    /// has already burned its single ask on Wi-Fi alone and would never be
+    /// offered the signal that replaced it.
+    /// </summary>
+    private const string PermissionAskedKey = "aware.signals.permission.asked.v2";
+
+    /// <summary>
+    /// How long the BLE scan listens. Runs concurrently with the three sensor
+    /// reads rather than after them, so it costs no extra launch time.
+    /// </summary>
+    private const int BluetoothScanMs = 2500;
+
+    /// <summary>Same reasoning as <see cref="AccessPointsHashed"/>.</summary>
+    private const int BluetoothDevicesHashed = 8;
 
     private readonly ILogger<AndroidFingerprintProvider> _log;
     private readonly Context? _context;
@@ -63,6 +83,7 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
             if (_sensors.GetDefaultSensor(SensorType.MagneticField) is not null) present.Add("magnetometer");
             if (_sensors.GetDefaultSensor(SensorType.Light) is not null) present.Add("light");
             if (_sensors.GetDefaultSensor(SensorType.Pressure) is not null) present.Add("pressure");
+            if (HasBluetoothPermission) present.Add("Bluetooth");
             if (HasWifiPermission) present.Add("Wi-Fi");
 
             return present.Count == 0
@@ -78,6 +99,11 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
         var signals = new List<FingerprintSignal>();
 
         await EnsureWifiPermissionAsync(ct);
+
+        // Started before the sensors and awaited after them: the scan listens for
+        // 2.5 s, which is roughly what the three sensor reads take anyway, so
+        // overlapping them keeps launch the same length as before Bluetooth.
+        var bluetooth = ReadBluetoothHashAsync(ct);
 
         var magnetic = await ReadVectorAsync(SensorType.MagneticField, ct);
         signals.Add(new FingerprintSignal("Magnetic signature",
@@ -101,9 +127,14 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
                 : $"{apCount} access points, hashed",
             wifiHash is not null));
 
+        var (btHash, btCount, btReason) = await bluetooth;
+        signals.Add(new FingerprintSignal("Bluetooth neighbourhood",
+            btHash is null ? btReason : $"{btCount} devices, hashed",
+            btHash is not null));
+
         var fingerprint = new RoomFingerprint(
             WifiFeatureHash: wifiHash ?? string.Empty,
-            BluetoothFeatureHash: string.Empty,
+            BluetoothFeatureHash: btHash ?? string.Empty,
             // Lux is carried in X; the domain models light as a vector for a
             // future directional reading, which no phone sensor provides today.
             AmbientLightVector: new Vector3(light ?? 0f, 0f, 0f),
@@ -244,7 +275,7 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
     private async Task EnsureWifiPermissionAsync(CancellationToken ct)
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(23)) return;
-        if (HasWifiPermission || HasAskedForPermission) return;
+        if ((HasWifiPermission && HasBluetoothPermission) || HasAskedForPermission) return;
 
         if (Uno.UI.ContextHelper.Current is not Android.App.Activity activity)
             return;
@@ -253,9 +284,15 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
         // it — a launch with no activity must not burn the single ask.
         HasAskedForPermission = true;
 
+        // Asked together in one prompt rather than in two sequential dialogs.
+        // Either can be declined on its own; each simply removes one signal.
+        var requested = new List<string> { WifiPermission };
+        if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            requested.Add("android.permission.BLUETOOTH_SCAN");
+
         try
         {
-            activity.RequestPermissions([WifiPermission], requestCode: 4711);
+            activity.RequestPermissions([.. requested], requestCode: 4711);
         }
         catch (Exception ex)
         {
@@ -264,10 +301,146 @@ public sealed class AndroidFingerprintProvider : IRoomFingerprintProvider
         }
 
         var deadline = Environment.TickCount64 + PermissionWaitMs;
-        while (Environment.TickCount64 < deadline && !HasWifiPermission)
+        while (Environment.TickCount64 < deadline && !HasBluetoothPermission && !HasWifiPermission)
         {
             ct.ThrowIfCancellationRequested();
             await Task.Delay(250, ct);
+        }
+    }
+
+    // -- bluetooth ---------------------------------------------------------
+
+    /// <summary>
+    /// BLUETOOTH_SCAN is declared <c>neverForLocation</c>, which is what lets this
+    /// work at all: unlike Wi-Fi scan results, it is not gated behind a location
+    /// permission the app deliberately does not hold. It is therefore the only
+    /// set-shaped signal Aware can still read on Android 13+.
+    ///
+    /// <para><strong>Names, not addresses.</strong> BLE advertising addresses are
+    /// resolvable private addresses on most modern devices and rotate every few
+    /// minutes, so hashing them would change the room's identity while the phone
+    /// sat still. Advertised names do not rotate, and named advertisers are mostly
+    /// the fixed appliances that make a room what it is — a television, a speaker,
+    /// a thermostat. This is also exactly what 07-DATA-PRIVACY specifies:
+    /// "Wi-Fi/Bluetooth hashes over device names". Unnamed advertisers are
+    /// skipped rather than hashed.</para>
+    /// </summary>
+    private async Task<(string? Hash, int Count, string Reason)> ReadBluetoothHashAsync(
+        CancellationToken ct)
+    {
+        // BLUETOOTH_SCAN with neverForLocation arrived in API 31. Below that a
+        // scan needs location, which this app does not ask for, so the signal is
+        // simply absent and the matcher renormalizes.
+        if (!OperatingSystem.IsAndroidVersionAtLeast(31))
+            return (null, 0, "Needs Android 12 or newer");
+
+        if (!HasBluetoothPermission) return (null, 0, "Permission not granted");
+
+        BluetoothLeScanner? scanner = null;
+        LeScanCollector? collector = null;
+
+        try
+        {
+            if (_context?.GetSystemService(Context.BluetoothService) is not BluetoothManager manager)
+                return (null, 0, "No Bluetooth on this device");
+
+            var adapter = manager.Adapter;
+            if (adapter is null) return (null, 0, "No Bluetooth on this device");
+            if (!adapter.IsEnabled) return (null, 0, "Bluetooth is off");
+
+            scanner = adapter.BluetoothLeScanner;
+            if (scanner is null) return (null, 0, "Bluetooth is off");
+
+            collector = new LeScanCollector();
+            scanner.StartScan(collector);
+
+            await Task.Delay(BluetoothScanMs, ct);
+
+            var names = collector.Strongest(BluetoothDevicesHashed);
+            if (names.Count == 0) return (null, 0, "No named devices in range");
+
+            var digest = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('|', names)));
+
+            return ($"bt-{Convert.ToHexString(digest)[..12].ToLowerInvariant()}", names.Count, string.Empty);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not scan for Bluetooth devices.");
+            return (null, 0, "Scan unavailable");
+        }
+        finally
+        {
+            // Leaving a scan running drains the battery long after the reading.
+            if (scanner is not null && collector is not null)
+            {
+                try { scanner.StopScan(collector); }
+                catch (Exception ex) { _log.LogWarning(ex, "Could not stop the Bluetooth scan."); }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collects advertised names and the strongest signal seen for each. Callbacks
+    /// arrive on a binder thread, so the dictionary is guarded.
+    /// </summary>
+    private sealed class LeScanCollector : ScanCallback
+    {
+        private readonly Dictionary<string, int> _strongest = new(StringComparer.Ordinal);
+        private readonly Lock _gate = new();
+
+        public override void OnScanResult(ScanCallbackType callbackType, LeScanResult? result) =>
+            Record(result);
+
+        public override void OnBatchScanResults(IList<LeScanResult>? results)
+        {
+            if (results is null) return;
+            foreach (var result in results) Record(result);
+        }
+
+        private void Record(LeScanResult? result)
+        {
+            var name = result?.ScanRecord?.DeviceName;
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            name = name.Trim();
+
+            lock (_gate)
+            {
+                if (!_strongest.TryGetValue(name, out var rssi) || result!.Rssi > rssi)
+                    _strongest[name] = result!.Rssi;
+            }
+        }
+
+        /// <summary>
+        /// The strongest few, then sorted by name so the hash does not depend on
+        /// the order advertisements happened to arrive in.
+        /// </summary>
+        public IReadOnlyList<string> Strongest(int count)
+        {
+            lock (_gate)
+            {
+                return [.. _strongest
+                    .OrderByDescending(pair => pair.Value)
+                    .Take(count)
+                    .Select(pair => pair.Key)
+                    .OrderBy(name => name, StringComparer.Ordinal)];
+            }
+        }
+    }
+
+    private bool HasBluetoothPermission
+    {
+        get
+        {
+            if (_context is null) return false;
+            if (!OperatingSystem.IsAndroidVersionAtLeast(31)) return false;
+
+            return _context.CheckSelfPermission("android.permission.BLUETOOTH_SCAN")
+                   == Permission.Granted;
         }
     }
 

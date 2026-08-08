@@ -40,6 +40,20 @@
   -->
   <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
+  <!--
+    Bluetooth is the signal that replaces Wi-Fi. neverForLocation genuinely works
+    here — unlike getScanResults above, a BLE scan under BLUETOOTH_SCAN with this
+    flag needs no location permission, which is what keeps Aware location-free.
+
+    Only advertised device *names* are hashed, never addresses: BLE addresses are
+    resolvable-private on most modern hardware and rotate every few minutes, which
+    would change a room's identity while the phone sat still.
+  -->
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+                   android:usesPermissionFlags="neverForLocation" />
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
   <!-- The magnetometer, light and pressure sensors need no permission, and none
        of them is required: a device without one simply contributes fewer
        signals to the match. -->

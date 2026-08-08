@@ -96,17 +96,22 @@ public class FingerprintMatcherTests
         Assert.Empty(result.Contradictions);
     }
 
+    /// <summary>
+    /// Deliberately no longer detects a change of floor. A tolerance tight enough
+    /// for one storey (~1.5 hPa) makes a room contradict itself within a day:
+    /// measured on a Pixel 8, one room read 1015.0 hPa in the morning and 1011.6
+    /// that night, 3.4 hPa of pure weather. Identity has to survive the weather,
+    /// so the storey-sized signal is what gets given up.
+    /// </summary>
     [Fact]
-    public void PressureToleratesWeatherButNotAChangeOfFloor()
+    public void PressureToleratesADayOfWeather()
     {
-        // Ordinary barometric drift keeps the room recognized.
-        var drift = Matcher.Compare(Stored, Live(Stored with { PressureHpa = 1008.4f }));
+        var drift = Matcher.Compare(Stored, Live(Stored with { PressureHpa = 1008f + 3.4f }));
         Assert.Contains("Air pressure", drift.Agreements);
 
-        // Roughly one storey is about 0.12 hPa per metre; several storeys is not
-        // the same room.
-        var upstairs = Matcher.Compare(Stored, Live(Stored with { PressureHpa = 1004f }));
-        Assert.Contains("Air pressure", upstairs.Contradictions);
+        // Only a gross change still reads as somewhere else.
+        var farOff = Matcher.Compare(Stored, Live(Stored with { PressureHpa = 1008f - 12f }));
+        Assert.Contains("Air pressure", farOff.Contradictions);
     }
 
     [Fact]
@@ -128,22 +133,29 @@ public class FingerprintMatcherTests
         Assert.Contains("Ambient light", daylight.Contradictions);
     }
 
+    /// <summary>
+    /// The inverse of what this used to assert, and the correction matters.
+    /// The magnetometer reports in device coordinates, so direction tracks how
+    /// the phone is being held, not where it is: two readings in one kitchen
+    /// thirteen minutes apart were 29 µT apart as vectors and 0.7 µT apart as
+    /// magnitudes. Scoring direction was scoring the user's wrist.
+    /// </summary>
     [Fact]
-    public void MagneticDirectionMattersMoreThanMagnitude()
+    public void MagneticUsesStrengthAndIgnoresDirection()
     {
-        // Same heading, slightly weaker field: still the same corner of the building.
-        var weaker = Matcher.Compare(Stored, Live(Stored with
-        {
-            MagneticVector = Stored.MagneticVector * .92f,
-        }));
-        Assert.Contains("Magnetic signature", weaker.Agreements);
-
-        // Opposite heading at the same strength: not the same place.
+        // Phone turned over. Same place, so this must still agree.
         var flipped = Matcher.Compare(Stored, Live(Stored with
         {
             MagneticVector = -Stored.MagneticVector,
         }));
-        Assert.Contains("Magnetic signature", flipped.Contradictions);
+        Assert.Contains("Magnetic signature", flipped.Agreements);
+
+        // A materially weaker field is a different place, whatever way it points.
+        var weaker = Matcher.Compare(Stored, Live(Stored with
+        {
+            MagneticVector = Stored.MagneticVector * .5f,
+        }));
+        Assert.Contains("Magnetic signature", weaker.Contradictions);
     }
 
     [Fact]

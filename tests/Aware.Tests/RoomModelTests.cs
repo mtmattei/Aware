@@ -26,7 +26,10 @@ public class RoomModelTests
         WifiFeatureHash: "wifi-test-0001",
         BluetoothFeatureHash: "bt-test-0001",
         AmbientLightVector: new Vector3(120f, 0f, 0f),
-        MagneticVector: new Vector3(.12f, -.44f, .61f),
+        // Microtesla, at the scale a real magnetometer reports (‖B‖ ≈ 76). The
+        // old value was ~0.77 µT, a hundred times too small, which left every
+        // difference inside the matcher's tolerance.
+        MagneticVector: new Vector3(12f, -44f, 61f),
         PressureHpa: 1008f,
         AcousticEmbeddingId: null);
 
@@ -403,7 +406,13 @@ public class RoomModelTests
             new(available: true, () => Reading(stored with
             {
                 WifiFeatureHash = "wifi-somewhere-else",
-                MagneticVector = -stored.MagneticVector,
+                // Must differ too, or the heaviest signal in the match quietly
+                // agrees and "a different room" scores over half.
+                BluetoothFeatureHash = "bt-somewhere-else",
+                // A weaker field, not a flipped one. Negating the vector only
+                // reverses direction, which is device-frame and now correctly
+                // reads as the same place with the phone held the other way up.
+                MagneticVector = stored.MagneticVector * .4f,
                 PressureHpa = stored.PressureHpa + 40f,
                 AmbientLightVector = stored.AmbientLightVector * 64f,
             }));
