@@ -1,5 +1,25 @@
-# HANDOFF — Aware recognition-only rooms (SPEC complete, device test outstanding)
-Updated: 2026-08-07 22:20
+# HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
+Updated: 2026-08-07 22:15
+
+## Read this first
+
+**The Pixel now launches and the feature works on real sensors.** Standing in the
+kitchen, the app opens the recognition-only room by itself reading
+`No model yet · you are here · 3 signals match`, draws the floor plate, and keeps
+Measure and Memories dead. That is SPEC steps 4, 5, 6 and 8 confirmed on hardware.
+
+**A crash blocked all of this and is fixed (`1f9babc`).** `SpatialRoomView.OnUnloaded`
+disposed the renderer — freeing every native Skia paint, font, path and shader — while
+the view was still alive and about to be reloaded. On Android the splash screen swaps
+content under the page, so the first frame drew through freed handles: **SIGSEGV at
+address 0 in libSkiaSharp**, dead before anything rendered. The same bug is what
+crashed desktop with a `0xc0000005` AV when the room list was a route. The routed list
+did not cause it, it only exposed it.
+
+**Data loss, caused by this session:** deploying `-c Release` to the Pixel forced an
+uninstall/reinstall (different signing key) and **wiped app data at 22:05**, destroying
+the `Kitchen` room from the earlier session. A new `kitchen` was created at 22:06 and
+works. **Do not deploy Release to a device that holds rooms you care about.**
 
 ## Where we are
 
@@ -20,9 +40,12 @@ and **half done on the Pixel** — the app is deployed and the sensor half is un
   to a place`), the open room carries the sage marker, and switching to an unmodelled
   room works — Measure and Memories go dead, the floor plate draws, the note appears,
   no relaunch needed.
-- **Android:** deployed 2026-08-07 22:0x, app data preserved (Kitchen intact).
-  **Not launched or driven** — the phone was in active use.
-- **Git:** `main`, clean. `375a0f9` (step 6), `29e883d` (the fix).
+- **Android (Pixel 8, Debug, 22:07):** launches and stays up. Locator opens the
+  recognition-only room automatically against real sensors; floor plate draws; Measure
+  and Memories dead; `Rooms` and `Add this place` both offered (Android has sensors,
+  desktop hides Add). Stored rooms: `kitchen` (recognition-only) and the seeded garage.
+- **Git:** `main`, clean. `1f9babc` (renderer lifecycle), `375a0f9` (step 6),
+  `29e883d` (unmodelled state on room switch).
 
 ## Fixed this session
 
@@ -52,11 +75,13 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
 
 ## Next actions (in order)
 
-1. **The walk test. Needs a human.** Launch Aware in the kitchen, confirm it opens the
-   Kitchen by itself. Carry the phone to another room, relaunch, confirm the Kitchen
-   does *not* open. Walk back, confirm it does. This is the one thing desktop
-   simulation cannot stand in for, and it is the whole point of the feature.
+1. **The walk test. Needs a human. Half of it is already done.** Standing in the
+   kitchen, `kitchen` opens by itself — confirmed 22:09. What remains is the negative
+   case: carry the phone to another room, relaunch, confirm `kitchen` does *not* open
+   (expect the garage fallback plus `you are somewhere else`), then walk back and
+   confirm it does. Only the negative half is unproven.
    `am start -n com.companyname.aware/crc64069453ae4e9f0b37.MainActivity` — not `monkey`.
+   **The bar may be too generous for this** — see item 4.
 2. **Exercise the room list on the phone**, where "Add this place" is actually visible
    (desktop hides it: no sensors). Create a second real room from the list and confirm
    both appear with sensible reason lines.
@@ -84,6 +109,8 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
   Use the Release exe + `tools/Send-Input.ps1` for simulated-sensor runs.
 - **Debug desktop build via `uno_app_start` exits immediately** on this machine
   (Release exe runs fine). Not diagnosed; unrelated to app code.
+- **Deploying `-c Release` to a device wipes its app data** (different signing key →
+  uninstall/reinstall). This destroyed a real room once already. Stay on Debug.
 - **`Send-AwareClick` silently misses when the app is not foreground.**
   `tools/Diagnose-Input.ps1` prints aim-vs-landing and settles it in one run: error
   (0,0) means input is fine. Client = image − (8, 31) at 96 DPI, confirmed again.
