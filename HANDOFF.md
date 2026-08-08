@@ -1,48 +1,66 @@
 # HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
 Updated: 2026-08-07 22:15
 
-## Do this first (5 minutes, needs the phone plugged in)
+## Do this first: the walk test
 
-The matcher was rebuilt tonight and **has never run on hardware** — the Pixel
-disconnected before it could be deployed. Everything below is built, 4 TFMs clean,
-122 tests passing, and unverified on a device.
+Everything is deployed on the Pixel and **the positive half is verified**. Standing
+in the kitchen, two consecutive force-stop relaunches scored **0.996** and **0.997**
+and opened the kitchen. What is still unproven is the negative half — whether
+another room now fails to match. That is the one thing that needs legs.
+
+1. Kitchen → force-close Aware (swipe away, not just background) → reopen.
+   Expect `kitchen`. The fingerprint is read only at launch, so resuming proves nothing.
+2. Walk to another room, wait ~10 s, force-close → reopen. Expect **Your Garage**.
+3. Walk back, force-close → reopen. Expect `kitchen`.
+
+**Every launch now logs why**, so tune against numbers rather than impressions:
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.16.8-hotspot"
-dotnet build Aware/Aware.csproj -f net10.0-android -c Debug -t:Run   # Debug ONLY
+adb logcat -c        # then force-close and reopen the app
+adb logcat -d | Select-String 'Locate:'
 ```
 
-Then, in order:
-1. **Grant the Bluetooth prompt** when it appears. The ask-once key was versioned
-   (`aware.signals.permission.asked.v2`), so this install will ask again.
-2. Delete the stored `kitchen` and re-add it, so it is saved **with** a Bluetooth
-   hash. Rooms stored before tonight have an empty one, and an empty hash drops out
-   of the match instead of discriminating — they will keep matching everywhere.
-3. Redo the walk test. The kitchen must open in the kitchen and **not** open in
-   another room.
-4. If Bluetooth reports "No named devices in range", the fingerprint is back to
-   magnetic strength alone. That still separated your two rooms in the measured
-   data (46.2 vs 21.3 µT), but with far less margin — say so rather than assuming.
+It prints each room's score, `recognized`/`rejected`, and which signals agreed.
 
-## Why it was recognizing every room
+**Re-capture any room stored before commit `f6acd7c`.** A fingerprint taken with the
+old power-saving scan holds 2 devices; comparing it against the 4 a low-latency scan
+now finds scores 0.5 on overlap alone, which looks exactly like the bug. The current
+`kitchen` was captured after the change and is fine.
 
-Measured, not guessed:
+## What the fingerprint actually turned out to be
 
-- **Magnetic scored the phone's orientation, not the room.** The magnetometer is
-  device-frame; two readings in one kitchen 13 minutes apart were **29 µT apart as
-  vectors and 0.7 µT apart as magnitudes**. The old formula weighted direction 0.75,
-  magnitude 0.25, and its `(cos+1)/2` mapping never dropped below 0.5. Now magnitude
-  only.
-- **Pressure contradicted itself with the weather.** Same room: 1015.0 hPa morning,
-  1011.6 hPa night — 3.4 hPa against a 1.5 hPa tolerance. Widened to 6, weight cut to
-  0.10. Floor detection is deliberately given up.
-- **Wi-Fi contributed nothing** while holding 0.45 of the weight (see below).
+Every one of these was measured on a Pixel 8, not reasoned about, and each replaced
+a plausible-sounding assumption that was wrong.
 
-Combined, two rooms in one home scored ~0.77 against a 0.6 bar. The matcher could
-not say "somewhere else". **Bluetooth now carries the 0.45**, hashing advertised
-*names* (BLE addresses rotate every few minutes and would change a room's identity
-while the phone sat still; names are stable, and 07-DATA-PRIVACY specified names
-all along).
+- **Wi-Fi is dead on Android 13+ and contributed nothing while holding 0.45 of the
+  weight.** `getScanResults()` is refused without a location permission the app
+  deliberately does not hold. Its hash was also a single blob over the strongest
+  BSSIDs — the same set in every room of one home, so it separated buildings, not
+  rooms, and restoring it would have raised scores rather than discriminated.
+- **Magnetic direction is device-frame** — it describes how the phone is held. Two
+  readings in one kitchen were 29 µT apart as vectors, 0.7 µT as magnitudes. Now
+  magnitude only.
+- **Magnetic magnitude is barely usable either.** That kitchen has read 46.2, 45.6,
+  46.5, 34.5 and 21.4 µT — a within-room spread as wide as the gap to the garage
+  (21.3). At weight 0.30 it *disagreed with the room the phone was standing in* and
+  dragged the score to 0.666, a margin of 0.066 over the bar. Now a nudge at 0.10.
+- **Pressure drifts with weather, not height.** Same room, 1015.0 hPa morning and
+  1011.6 that night — 3.4 hPa against a 1.5 hPa "one storey" tolerance. Widened to 6,
+  weight 0.10. Detecting a floor change is deliberately given up.
+- **Bluetooth carries the feature, at 0.70.** `BLUETOOTH_SCAN` with
+  `neverForLocation` genuinely needs no location permission.
+  - **Names, not addresses** — BLE addresses are resolvable-private and rotate every
+    few minutes (07-DATA-PRIVACY specified names all along).
+  - **Per-device hashes compared by overlap, not one hash over the set** — a blob
+    hash gave the same kitchen two different fingerprints four minutes apart, because
+    advertisers sleep and wake between scans.
+  - **`ScanMode.LowLatency`** — Android's default duty-cycles the radio and found
+    only 2 devices here; low latency finds 4, which is the difference between a set
+    that can afford to lose one and one that cannot.
+
+**The remaining fragility is physical, not fixable in software:** four named BLE
+advertisers is thin. In a room with none, the fingerprint falls back to signals that
+were measured not to discriminate, and recognition will not work there.
 
 ## Read this first
 
@@ -77,7 +95,10 @@ and **half done on the Pixel** — the app is deployed and the sensor half is un
 ## Last verified state
 
 - **Build:** all four TFMs, **0 warnings / 0 errors**. Uno.Sdk 6.6.42 / .NET 10.0.302.
-- **Tests:** `tests/Aware.Tests`, **115 passing** (108 + 7 new `RoomListMessagesTests`).
+- **Tests:** `tests/Aware.Tests`, **126 passing**. `FieldMeasuredMatchTests` is built
+  from readings actually taken on the device and pins both directions: another room
+  must not match the kitchen, and the kitchen must still match itself across a 29 µT
+  reorientation and from a step across the room.
 - **Desktop runtime (Release exe + `tools/`):** room list opens over the live viewport,
   both rooms listed with correct reason lines (`No model yet`, `7 objects · not linked
   to a place`), the open room carries the sage marker, and switching to an unmodelled
@@ -87,7 +108,8 @@ and **half done on the Pixel** — the app is deployed and the sensor half is un
   recognition-only room automatically against real sensors; floor plate draws; Measure
   and Memories dead; `Rooms` and `Add this place` both offered (Android has sensors,
   desktop hides Add). Stored rooms: `kitchen` (recognition-only) and the seeded garage.
-- **Git:** `main`, clean. `1f9babc` (renderer lifecycle), `375a0f9` (step 6),
+- **Git:** `main`, clean. `f6acd7c` (scan mode + weights), `0dd5284` (set overlap),
+  `d8fdc6c` (matcher rebuild), `1f9babc` (renderer lifecycle), `375a0f9` (step 6),
   `29e883d` (unmodelled state on room switch).
 
 ## Fixed this session
@@ -118,32 +140,33 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
 
 ## Next actions (in order)
 
-1. **The walk test. Needs a human. Half of it is already done.** Standing in the
-   kitchen, `kitchen` opens by itself — confirmed 22:09. What remains is the negative
-   case: carry the phone to another room, relaunch, confirm `kitchen` does *not* open
-   (expect the garage fallback plus `you are somewhere else`), then walk back and
-   confirm it does. Only the negative half is unproven.
-   `am start -n com.companyname.aware/crc64069453ae4e9f0b37.MainActivity` — not `monkey`.
-   **The bar may be too generous for this** — see item 4.
+1. **The walk test** — see the top of this file. Only the negative half is unproven.
 2. **Exercise the room list on the phone**, where "Add this place" is actually visible
    (desktop hides it: no sensors). Create a second real room from the list and confirm
    both appear with sensible reason lines.
-3. **Decide: does the sample garage stay linkable?** SPEC unresolved question #1 said
-   decide before step 7; step 7 shipped without it. It is no longer hypothetical — the
-   garage on the Pixel **is** linked to a real place (fingerprint saved 06:54, after the
-   unlink fix, so via the Link button). That is exactly the incoherence SPEC opens with.
-   The spec recommends dropping Link from the sample.
-4. **Reconsider the 0.6 auto-open bar.** Scoring the Pixel's two stored rooms: from the
-   kitchen, the garage scores **~0.83** — clears the bar from a different room in the
-   same building. Same floor means near-identical pressure, and magnetic *direction*
-   agrees more than magnitude disagrees. The Kitchen should still win on max, but SPEC
-   unresolved question #3 wanted real multi-room data before tuning; this is it.
-5. Bluetooth is still the unread fifth signal (`BluetoothFeatureHash` empty). Both
-   stored rooms also have an empty `wifiFeatureHash`, so matching currently runs on
-   **three** signals with weights renormalized from 0.55 — worth checking whether
-   `NEARBY_WIFI_DEVICES` was declined on the device.
-6. Portrait framing decision (unchanged from last handoff).
-7. Real geometry needs ARCore; the .NET binding story is the unknown.
+3. **Start capture — the next real phase, and it does not need ARCore to begin.**
+   `ISpatialCaptureAdapter.CaptureAsync` is implemented by `SimulationCaptureAdapter`
+   and **is still never called by anything**. Wire a "Scan this room" action to it and
+   fold the observations into the open room's geometry under its existing `RoomId`.
+   Driven by the simulator this needs no native work, and it proves the whole
+   downstream path — observations → primitives → persistence → progressive render —
+   plus the recognition-only-room-*becomes*-modelled transition that SPEC's second
+   unresolved question flags as untested. Do this before ARCore, not after.
+4. **Then ARCore, behind the same interface.** The unknown is the binding: ARCore is a
+   Java AAR (`com.google.ar:core`) with no first-party .NET 10 Android binding, so it
+   likely means an Android binding library project. Timebox a spike before committing.
+   **Set expectations:** ARCore yields planes and depth, which map onto the existing
+   shell primitives (floor, walls) — it does not yield "that is a workbench". Semantic
+   classification is a separate ML problem, and the correction flow already lets a user
+   name things, which may be the honest Phase 2 answer.
+5. **Decide: does the sample garage stay linkable?** SPEC unresolved question #1 said
+   decide before step 7 and step 7 shipped without it. Currently moot on this device —
+   the data wipe re-seeded the garage unlinked, and the locator now logs
+   `Your Garage is not linked to a place` — but the affordance is still there and will
+   recreate the incoherence the moment someone taps it.
+6. **Revisit the 0.6 bar once there are three or more real rooms.** Untunable on two.
+   The earlier ~0.83 cross-room figure is obsolete: it came from the old matcher.
+7. Portrait framing decision (unchanged from earlier handoffs).
 
 ## Known-bad, do not re-derive
 
