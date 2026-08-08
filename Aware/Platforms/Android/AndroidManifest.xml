@@ -13,6 +13,31 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
                    android:maxSdkVersion="32" />
+  <!--
+    KNOWN BROKEN, measured on a Pixel 8 (2026-08-07): the Wi-Fi signal never
+    reaches the fingerprint on Android 13+. NEARBY_WIFI_DEVICES is granted, yet
+    WifiManager.getScanResults() is refused:
+
+      W WifiService: Permission violation - getScanResults not allowed for
+      uid=..., packageName=com.companyname.aware,
+      reason=java.lang.SecurityException: UID ... has no location permission
+
+    ACCESS_FINE_LOCATION above is capped at SDK 32, so the app holds no location
+    permission and the call returns an empty list. Adding
+    android:usesPermissionFlags="neverForLocation" here does NOT lift the gate —
+    that was tried and measured, and the same SecurityException came back.
+
+    The failure is silent: no prompt, no exception in managed code, just an empty
+    result. So the sharpest discriminator in the match (weight 0.45) contributes
+    nothing, and matching runs on three signals renormalized from 0.55, where
+    pressure is identical on one floor and the magnetic direction is dominated by
+    the Earth's field. The floor score between two rooms in one home is then
+    ~0.77 — above the 0.6 bar — so every room recognizes as every other room.
+
+    Fixing it means choosing: hold ACCESS_FINE_LOCATION at runtime (works, but
+    asks for location in an app whose promise is that nothing leaves the device),
+    or drop Wi-Fi and make the remaining signals discriminate. Not decided.
+  -->
   <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
   <!-- The magnetometer, light and pressure sensors need no permission, and none
