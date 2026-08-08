@@ -72,6 +72,16 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     public bool CanConfirmAddPlace => !string.IsNullOrWhiteSpace(NewPlaceName);
 
+    /// <summary>
+    /// Measure and Memories need geometry. They stay visible but disabled rather
+    /// than hidden: the triad is fixed (01-PRODUCT-BRIEF, "lenses, not separate
+    /// apps"), and hiding two of three would teach the wrong model of the app.
+    /// </summary>
+    [ObservableProperty] private bool hasModel = true;
+
+    /// <summary>Said once, under the empty floor, rather than on every lens.</summary>
+    [ObservableProperty] private string? unmodelledNote;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTrayOpen))]
     [NotifyPropertyChangedFor(nameof(SelectedObjectName))]
@@ -217,6 +227,18 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
                        && _recognition.LastReading is { HasAnySignal: true };
 
         CanAddPlace = _fingerprints.IsAvailable;
+        ApplyModelledState();
+    }
+
+    private void ApplyModelledState()
+    {
+        HasModel = _room?.IsModelled ?? true;
+        UnmodelledNote = HasModel
+            ? null
+            : "No model yet. Aware recognizes this place but has not mapped it.";
+
+        if (!HasModel && ActiveLens != SpatialLens.Explore)
+            ActiveLens = SpatialLens.Explore;
     }
 
     // ------------------------------------------------------------------
@@ -375,6 +397,10 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     {
         if (!Enum.TryParse<SpatialLens>(lens, ignoreCase: true, out var parsed)) return;
         if (parsed == ActiveLens) return;
+
+        // Guarding here as well as in XAML: a disabled button is a hint, not a
+        // gate, and the command is reachable from automation.
+        if (!HasModel && parsed != SpatialLens.Explore) return;
 
         // Camera and geometry are untouched; only the annotation layer and the
         // tray content change (06-MOTION-BRIEF).

@@ -172,6 +172,21 @@
          bottom-anchored and nothing else moves it. -->
     <Grid utu:SafeArea.Insets="VisibleBounds,SoftInput">
 
+      <!-- Said under the empty floor of a recognition-only room. Artifacts before
+           explanatory text (01-PRODUCT-BRIEF), so the plate carries the meaning and
+           this only names it. Lives here rather than beside the viewport because
+           the Skia canvas draws over anything declared before it. -->
+      <TextBlock Text="{Binding UnmodelledNote}"
+                 Style="{StaticResource AwareSupportTextStyle}"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Bottom"
+                 Margin="32,0,32,72"
+                 TextAlignment="Center"
+                 TextWrapping="Wrap"
+                 MaxWidth="360"
+                 IsHitTestVisible="False"
+                 Visibility="{Binding UnmodelledNote, Converter={StaticResource NotEmptyToVisibility}}" />
+
       <!-- 2. Room title and confidence.
            The text keeps its own IsHitTestVisible="False" group, unchanged, so a
            drag starting over the title still orbits the model. The outer panel
@@ -249,6 +264,8 @@
             <Button Content="Measure"
                   Style="{StaticResource AwareLensButtonStyle}"
                   BorderThickness="0"
+                  IsEnabled="{Binding HasModel}"
+                  AutomationProperties.HelpText="Measure needs a model of this room."
                   Command="{Binding SetLensCommand}"
                   CommandParameter="Measure"
                   Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Measure}"
@@ -256,6 +273,8 @@
             <Button Content="Memories"
                   Style="{StaticResource AwareLensButtonStyle}"
                   BorderThickness="0"
+                  IsEnabled="{Binding HasModel}"
+                  AutomationProperties.HelpText="Memories needs a model of this room."
                   Command="{Binding SetLensCommand}"
                   CommandParameter="Memories"
                   Background="{Binding ActiveLens, Converter={StaticResource LensBackground}, ConverterParameter=Memories}"

@@ -46,9 +46,37 @@ public sealed class RenderSnapshotFactory : IRenderSnapshotFactory
             reducedMotion);
     }
 
+    /// <summary>
+    /// The ground a recognition-only room stands on. A room whose place is known
+    /// but whose shape is not would otherwise render as a void, which reads as a
+    /// broken renderer rather than as "shape unknown". A bare plate is the honest
+    /// picture — there is a floor here and nothing measured on it — and it keeps
+    /// orbit meaningful, so the room still behaves like a room.
+    ///
+    /// <para>02-UX-FLOWS forbids an empty spinner and puts artifacts before
+    /// explanatory text, so this is deliberately geometry rather than a label.</para>
+    /// </summary>
+    private static readonly RenderPrimitive UnmodelledGround = new(
+        "shell-floor-unmodelled",
+        ObjectId: null,
+        SpatialPrimitiveKind.Box,
+        // Roughly the seeded room's footprint, so the camera framing every other
+        // room uses needs no special case.
+        Size: new Vector3(7.4f, .18f, 5.6f),
+        Transform: new SpatialTransform(new Vector3(0f, -.09f, 0f), Vector3.Zero, Vector3.One),
+        MaterialKey: "floor",
+        ReconstructionStage: 0,
+        IsSelectable: false);
+
     private IReadOnlyList<RenderPrimitive> BuildPrimitives(SpatialRoom room)
     {
         if (ReferenceEquals(_cachedRoom, room)) return _cachedPrimitives;
+
+        if (!room.IsModelled)
+        {
+            _cachedRoom = room;
+            return _cachedPrimitives = [UnmodelledGround];
+        }
 
         var primitives = new List<RenderPrimitive>(
             room.Shell.Count + room.Objects.Sum(o => o.Primitives.Count));
