@@ -1,6 +1,8 @@
 # SPEC — Recognition-only rooms
 
-Status: written 2026-08-07, not implemented.
+Status: written 2026-08-07. **Steps 1–8 implemented 2026-08-07.** Step 9's desktop half
+is done; the Pixel half (walk between two physical rooms) is outstanding. One deviation:
+step 6's room list is an overlay, not a route — see `HANDOFF.md`.
 Implement in a **fresh session** that reads this cold, plus `CLAUDE.md`, `HANDOFF.md`,
 and the ten briefs in
 `OneDrive - Uno Platform\Desktop\unOS\AI-builds\aware\Aware\docs`.
