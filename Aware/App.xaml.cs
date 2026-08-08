@@ -98,8 +98,17 @@ public partial class App : Microsoft.UI.Xaml.Application
             new ViewMap<SpatialRoomPage, SpatialRoomViewModel>()
         );
 
-        // Navigation exists for room-level destinations only; lenses and
-        // selection are in-page state (09-UNO-NOTES).
+        // Navigation exists for room-level destinations only; lenses, selection
+        // and now the room list are in-page state (09-UNO-NOTES).
+        //
+        // The room list was built as a route first, per SPEC. On Skia desktop the
+        // round trip tore down and remounted the page that owns the
+        // SKCanvasElement, and pushing the next room's snapshot into the remounted
+        // canvas crashed the process with a native access violation; the back
+        // navigation also silently did nothing, because this shell has no Frame
+        // and no attached region to hold a back stack. The list is now an overlay
+        // on the room page, which is the same deviation already taken for the
+        // naming sheet and the first-launch card, and it keeps the canvas mounted.
         routes.Register(
             new RouteMap("", View: views.FindByViewModel<ShellModel>(),
                 Nested:

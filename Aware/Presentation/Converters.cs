@@ -149,3 +149,22 @@ public sealed class PercentConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// Sage fill when true, nothing when false. Marks the open room in the room list
+/// with the same selection material a selected object carries, so "current" is a
+/// material rather than a checkmark or a chevron.
+/// </summary>
+public sealed class SelectionBrushConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is not true) return null;
+
+        return Microsoft.UI.Xaml.Application.Current.Resources
+            .TryGetValue("AwareSelectionBrush", out var brush) ? brush : null;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
+        throw new NotSupportedException();
+}

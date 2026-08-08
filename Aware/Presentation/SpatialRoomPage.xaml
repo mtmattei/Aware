@@ -15,6 +15,7 @@
     <local:EvidenceNameConverter x:Key="EvidenceName" />
     <local:PercentConverter x:Key="Percent" />
     <local:EnumMatchToVisibilityConverter x:Key="EnumVisibility" />
+    <local:SelectionBrushConverter x:Key="CurrentRoomBackground" />
 
     <local:LensBrushConverter x:Key="LensBackground"
                               ActiveKey="AwareSelectionBrush"
@@ -221,6 +222,17 @@
                        Foreground="{StaticResource AwareSelectionDarkBrush}"
                        Background="{StaticResource AwareModelRearBrush}" />
         </StackPanel>
+
+        <!-- Room switching sits under the title as a quiet button, matching the
+             Objects/Motion treatment top-right. No nav bar: the room is the
+             interface and the list is a destination reached from it. -->
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Rooms"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Left"
+                Command="{Binding OpenRoomsCommand}"
+                AutomationProperties.Name="All rooms on this device"
+                AutomationProperties.HelpText="Lists every room Aware has stored and which one you are standing in." />
 
         <!-- Only where the device senses a place and this room has none. -->
         <Button Style="{StaticResource AwareQuietButtonStyle}"
@@ -479,6 +491,81 @@
           </StackPanel>
         </Grid>
       </Border>
+
+      <!-- Rooms on this device. An overlay for the same reason the sheets below
+           are: it keeps the viewport mounted. As a separate route, returning from
+           the list remounted the page owning the Skia canvas and the next room's
+           snapshot crashed the process natively. -->
+      <Grid Background="{StaticResource AwareScrimBrush}"
+            Visibility="{Binding ShowRoomList, Converter={StaticResource BoolToVisibility}}">
+        <Border MaxWidth="440"
+                Margin="24"
+                Padding="26"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                CornerRadius="{StaticResource AwareTrayRadius}"
+                Background="{StaticResource AwareCanvasNearBrush}">
+          <Grid RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="5">
+              <local:TrackedText Text="ROOMS ON THIS DEVICE"
+                                 Tracking="3"
+                                 TextStyle="{StaticResource AwareEyebrowTextStyle}" />
+
+              <TextBlock Text="Places"
+                         Style="{StaticResource AwareTrayTitleTextStyle}" />
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="1"
+                          MaxHeight="330"
+                          VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding RoomList}"
+                            AutomationProperties.Name="Rooms stored on this device">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Button Style="{StaticResource AwareObjectRowButtonStyle}"
+                            Margin="0,0,0,2"
+                            Command="{Binding DataContext.ChooseRoomCommand, ElementName=Root}"
+                            CommandParameter="{Binding}"
+                            Background="{Binding IsCurrent, Converter={StaticResource CurrentRoomBackground}}"
+                            AutomationProperties.Name="{Binding AutomationName}">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Name}"
+                                   Style="{StaticResource AwareBodyTextStyle}"
+                                   FontSize="16" />
+                        <TextBlock Text="{Binding Reason}"
+                                   Style="{StaticResource AwareSupportTextStyle}" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        Spacing="8">
+              <!-- Absent where nothing can be sensed: a room with no fingerprint
+                   could never be recognized, so offering it would be a dead end. -->
+              <Button Content="Add this place"
+                      Style="{StaticResource AwarePrimaryButtonStyle}"
+                      Command="{Binding AddPlaceFromListCommand}"
+                      Visibility="{Binding CanAddPlace, Converter={StaticResource BoolToVisibility}}"
+                      AutomationProperties.Name="Add the room you are standing in" />
+
+              <Button Content="Close"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding CloseRoomListCommand}"
+                      AutomationProperties.Name="Close the room list" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
 
       <!-- Name this place. An overlay card rather than a ContentDialog: an
            implicit ContentDialog style never reaches a subclass on Uno, and its

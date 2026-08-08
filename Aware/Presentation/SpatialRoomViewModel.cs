@@ -66,6 +66,8 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool showAddPlace;
 
+    [ObservableProperty] private bool showRoomList;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanConfirmAddPlace))]
     private string newPlaceName = string.Empty;
@@ -123,6 +125,9 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<SpatialObjectListItem> Objects { get; } = [];
+
+    /// <summary>Every room stored on this device, rebuilt each time the list opens.</summary>
+    public ObservableCollection<RoomListItem> RoomList { get; } = [];
 
     public IReadOnlyList<string> KnownClasses { get; } =
     [
@@ -254,6 +259,77 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void CancelAddPlace() => ShowAddPlace = false;
+
+    /// <summary>
+    /// Shows every room stored on this device, and which one the user is standing
+    /// in. Reads the launch reading the recognition service already took, so the
+    /// list agrees with the line under the room title rather than sensing again
+    /// and possibly disagreeing with it.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenRoomsAsync()
+    {
+        if (_room is null) return;
+
+        var ct = _lifetime.Token;
+        var stored = await _rooms.GetRoomsAsync(ct);
+        var reading = _recognition.LastReading;
+
+        RoomList.Clear();
+
+        foreach (var room in stored)
+        {
+            var recognized = reading is { HasAnySignal: true }
+                             && room.Fingerprint is { } stamp
+                             && _matcher.Compare(stamp, reading).IsRecognized;
+
+            RoomList.Add(new RoomListItem(
+                room.Id,
+                room.Name,
+                RoomListMessages.Reason(room, recognized),
+                room.Id == _room.Id));
+        }
+
+        ShowRoomList = true;
+    }
+
+    [RelayCommand]
+    private void CloseRoomList() => ShowRoomList = false;
+
+    /// <summary>
+    /// Switches to a room from the list. Chosen from an overlay rather than a
+    /// separate route so the viewport is never unmounted: remounting the page
+    /// that owns the Skia canvas and then pushing the next room's snapshot into
+    /// it crashes the process natively on Skia desktop.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseRoomAsync(RoomListItem? item)
+    {
+        ShowRoomList = false;
+
+        // Choosing the room already open is a no-op the user can still express;
+        // reopening it would replay recognition for no reason.
+        if (item is null || item.IsCurrent) return;
+
+        var ct = _lifetime.Token;
+
+        var room = await _rooms.GetRoomAsync(item.Id, ct);
+        if (room is null)
+        {
+            StatusMessage = "That room is no longer stored on this device.";
+            return;
+        }
+
+        await OpenAsync(room, ct);
+    }
+
+    /// <summary>Leaves the list for the naming sheet, which already exists here.</summary>
+    [RelayCommand]
+    private void AddPlaceFromList()
+    {
+        ShowRoomList = false;
+        BeginAddPlace();
+    }
 
     /// <summary>
     /// Creates a room for the place the device is in right now: a name, an ambient
