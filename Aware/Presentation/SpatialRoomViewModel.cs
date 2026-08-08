@@ -335,6 +335,13 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
         CanLinkPlace = _room is { Fingerprint: null }
                        && _recognition.LastReading is { HasAnySignal: true };
+
+        // The room being switched to may be modelled or not, so the lens state and
+        // the empty-floor note have to be recomputed here as well as on load. Adding
+        // a place opens a room with no geometry through this path: without it the
+        // new room inherits the previous room's HasModel and shows live Measure and
+        // Memories buttons over a bare floor until the app is relaunched.
+        ApplyModelledState();
     }
 
     /// <summary>
