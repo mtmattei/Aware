@@ -106,9 +106,14 @@ public sealed partial class SpatialRoomPage : Page
         VisualStateManager.GoToState(
             this, _viewModel?.IsTrayOpen == true ? "ObjectLabelVisible" : "ObjectLabelHidden", useTransitions);
 
+    /// <summary>
+    /// Deliberately empty. This page is reloaded — the splash screen swaps content
+    /// under it, and any remount does the same — while <see cref="TryStart"/>
+    /// returns early once a view model is attached, so anything detached here was
+    /// never reattached: the tray stopped animating and taps stopped selecting.
+    /// Both publishers die with this page, so keeping the handlers leaks nothing.
+    /// </summary>
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_viewModel is not null) _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        if (_viewport is not null) _viewport.ObjectSelected -= OnObjectSelected;
     }
 }

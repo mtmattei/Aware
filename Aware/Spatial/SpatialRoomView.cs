@@ -95,6 +95,7 @@ public sealed class SpatialRoomView : SKCanvasElement
         KeyDown += OnKeyDown;
 
         _timer.Tick += OnTick;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
@@ -377,10 +378,30 @@ public sealed class SpatialRoomView : SKCanvasElement
         e.Handled = true;
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Unloaded means paused, not destroyed. This view is reloaded whenever its
+    /// page is — the splash screen swaps content under it on Android, and any
+    /// overlay or navigation that remounts the page does the same — and the same
+    /// instance keeps drawing afterwards.
+    ///
+    /// <para>Disposing the renderer here freed every native Skia paint, font,
+    /// path and shader while the view was still alive, so the next frame
+    /// dereferenced freed handles: <strong>SIGSEGV at address 0 inside
+    /// libSkiaSharp on Android, and the same fault as an access violation on
+    /// Skia desktop.</strong> Unsubscribing the tick handler was the same mistake
+    /// more quietly — a reloaded view never animated again.</para>
+    ///
+    /// <para>The renderer therefore lives as long as the view does. There is one
+    /// view instance and its Skia objects are finalizable, so nothing leaks past
+    /// the view's own lifetime.</para>
+    /// </summary>
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _timer.Stop();
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _timer.Stop();
-        _timer.Tick -= OnTick;
-        _renderer.Dispose();
+        // The snapshot and camera survived the unload, so this resumes rather
+        // than restarts: no re-run of the assembly animation on every remount.
+        EnsureRunning();
+        Invalidate();
     }
 }
