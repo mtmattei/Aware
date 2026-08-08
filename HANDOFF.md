@@ -1,6 +1,49 @@
 # HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
 Updated: 2026-08-07 22:15
 
+## Do this first (5 minutes, needs the phone plugged in)
+
+The matcher was rebuilt tonight and **has never run on hardware** — the Pixel
+disconnected before it could be deployed. Everything below is built, 4 TFMs clean,
+122 tests passing, and unverified on a device.
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.16.8-hotspot"
+dotnet build Aware/Aware.csproj -f net10.0-android -c Debug -t:Run   # Debug ONLY
+```
+
+Then, in order:
+1. **Grant the Bluetooth prompt** when it appears. The ask-once key was versioned
+   (`aware.signals.permission.asked.v2`), so this install will ask again.
+2. Delete the stored `kitchen` and re-add it, so it is saved **with** a Bluetooth
+   hash. Rooms stored before tonight have an empty one, and an empty hash drops out
+   of the match instead of discriminating — they will keep matching everywhere.
+3. Redo the walk test. The kitchen must open in the kitchen and **not** open in
+   another room.
+4. If Bluetooth reports "No named devices in range", the fingerprint is back to
+   magnetic strength alone. That still separated your two rooms in the measured
+   data (46.2 vs 21.3 µT), but with far less margin — say so rather than assuming.
+
+## Why it was recognizing every room
+
+Measured, not guessed:
+
+- **Magnetic scored the phone's orientation, not the room.** The magnetometer is
+  device-frame; two readings in one kitchen 13 minutes apart were **29 µT apart as
+  vectors and 0.7 µT apart as magnitudes**. The old formula weighted direction 0.75,
+  magnitude 0.25, and its `(cos+1)/2` mapping never dropped below 0.5. Now magnitude
+  only.
+- **Pressure contradicted itself with the weather.** Same room: 1015.0 hPa morning,
+  1011.6 hPa night — 3.4 hPa against a 1.5 hPa tolerance. Widened to 6, weight cut to
+  0.10. Floor detection is deliberately given up.
+- **Wi-Fi contributed nothing** while holding 0.45 of the weight (see below).
+
+Combined, two rooms in one home scored ~0.77 against a 0.6 bar. The matcher could
+not say "somewhere else". **Bluetooth now carries the 0.45**, hashing advertised
+*names* (BLE addresses rotate every few minutes and would change a room's identity
+while the phone sat still; names are stable, and 07-DATA-PRIVACY specified names
+all along).
+
 ## Read this first
 
 **The Pixel now launches and the feature works on real sensors.** Standing in the
@@ -111,6 +154,16 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
   (Release exe runs fine). Not diagnosed; unrelated to app code.
 - **Deploying `-c Release` to a device wipes its app data** (different signing key →
   uninstall/reinstall). This destroyed a real room once already. Stay on Debug.
+- **Wi-Fi scanning is dead on Android 13+ and cannot be fixed without location.**
+  `NEARBY_WIFI_DEVICES` is granted and `getScanResults()` is still refused:
+  `SecurityException: UID ... has no location permission`. Adding
+  `usesPermissionFlags="neverForLocation"` was tried and measured and does **not**
+  lift that gate — do not retry it. The only ways back are holding
+  `ACCESS_FINE_LOCATION` at runtime (rejected: it breaks the location-free promise)
+  or leaving Wi-Fi out. It is left declared and inert, documented in the manifest.
+- Even if it worked, the Wi-Fi hash is a **set hash of the strongest BSSIDs**, which
+  is the same set in every room of a small home. It separates buildings, not rooms.
+  Room-level Wi-Fi needs per-AP RSSI vectors, which is a different design.
 - **`Send-AwareClick` silently misses when the app is not foreground.**
   `tools/Diagnose-Input.ps1` prints aim-vs-landing and settles it in one run: error
   (0,0) means input is fine. Client = image − (8, 31) at 96 DPI, confirmed again.
