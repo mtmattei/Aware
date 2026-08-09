@@ -768,19 +768,42 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Attaches a project to an object, creating one if the room has none.
+    ///
+    /// <para>Previously this dead-ended on "No projects exist on this device yet"
+    /// with nothing anywhere able to create one — projects existed only on the
+    /// seeded garage, so a room the user actually scanned could never have one.
+    /// A project attached to a physical thing is the point of 01-PRODUCT-BRIEF's
+    /// "unfinished work lives somewhere", so the first attach starts it.</para>
+    /// </summary>
     private async Task AttachProjectAsync(SpatialObject selected)
     {
         if (_room is null) return;
 
         var project = _room.Projects.FirstOrDefault();
+        var created = project is null;
+
         if (project is null)
         {
-            StatusMessage = "No projects exist on this device yet.";
-            return;
+            project = new SpatialProject(
+                Id: new ProjectId($"project-{Guid.NewGuid():N}"),
+                // Named after what it is attached to, which is the only thing
+                // known about it at this point. Renaming belongs to a later pass.
+                Name: $"{selected.DisplayName} project",
+                Status: "Started · nothing recorded yet",
+                LastActivityAt: DateTimeOffset.Now);
+
+            _room = _room with { Projects = [.. _room.Projects, project] };
         }
 
         await UpdateObjectAsync(selected with { AttachedProjectId = project.Id });
-        StatusMessage = $"{project.Name} attached to {selected.DisplayName}.";
+
+        StatusMessage = created
+            ? $"Started {project.Name} on {selected.DisplayName}."
+            : $"{project.Name} attached to {selected.DisplayName}.";
+
+        _haptics.Play(HapticKind.Confirm);
     }
 
     // ------------------------------------------------------------------
