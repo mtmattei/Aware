@@ -1,6 +1,45 @@
 # HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
 Updated: 2026-08-07 22:15
 
+## Capture is built and has never run on hardware
+
+**The app can now observe real geometry.** `ISpatialCaptureAdapter.CaptureAsync`
+had been declared since the first build and never once called; there is now an
+ARCore adapter behind it, an assembler folding observations into the room, and a
+`Scan this room` button. 4 TFMs clean, 135 tests, **zero device time** — the Pixel
+disconnected before any of it could be deployed.
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.16.8-hotspot"
+dotnet build Aware/Aware.csproj -f net10.0-android -c Debug -t:Run   # Debug ONLY
+```
+
+What to check, in order — each step can fail independently:
+
+1. **Does `Scan this room` appear at all?** It is bound to `CanCapture`, which is
+   false unless `ArCoreApk.CheckAvailability` reports supported. Absent means
+   ARCore is not installed or the Play Services for AR app is missing.
+2. **Camera prompt on first scan.** Asked at scan time, not launch.
+3. **Does the recognition line count surfaces?** It reads
+   `Scanning this room · N surfaces · M objects` while streaming. Zero surfaces
+   means planes are not being found — move slowly, and note ARCore needs texture
+   and light, so a dark kitchen at midnight is close to a worst case.
+4. **Does the model draw?** Observations are applied as they arrive, so shapes
+   should appear progressively rather than at the end.
+5. **Does it persist?** Force-close, reopen, confirm the room still has its shape
+   and that Measure and Memories are now live rather than dead.
+6. `adb shell run-as com.companyname.aware cat files/spatial/<room>.json` — the
+   `shell` array should have real extents and the room should keep its original id.
+
+**The likeliest failure is the GL texture.** ARCore requires a camera texture
+before `Session.Update()` returns frames, and `EnsureCameraTexture` calls
+`GLES20.GlGenTextures` on whatever thread the scan runs on. If there is no current
+EGL context on that thread the texture id is 0 and every frame is dropped —
+symptom is a scan that runs its full 45 s and observes nothing. If that happens,
+the fix is to create the texture on a thread with a live GL context, or host an
+offscreen `GLSurfaceView`. This is the one part of the design that was reasoned
+about rather than measured.
+
 ## Do this first: the walk test
 
 Everything is deployed on the Pixel and **the positive half is verified**. Standing
@@ -144,21 +183,11 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
 2. **Exercise the room list on the phone**, where "Add this place" is actually visible
    (desktop hides it: no sensors). Create a second real room from the list and confirm
    both appear with sensible reason lines.
-3. **Start capture — the next real phase, and it does not need ARCore to begin.**
-   `ISpatialCaptureAdapter.CaptureAsync` is implemented by `SimulationCaptureAdapter`
-   and **is still never called by anything**. Wire a "Scan this room" action to it and
-   fold the observations into the open room's geometry under its existing `RoomId`.
-   Driven by the simulator this needs no native work, and it proves the whole
-   downstream path — observations → primitives → persistence → progressive render —
-   plus the recognition-only-room-*becomes*-modelled transition that SPEC's second
-   unresolved question flags as untested. Do this before ARCore, not after.
-4. **Then ARCore, behind the same interface.** The unknown is the binding: ARCore is a
-   Java AAR (`com.google.ar:core`) with no first-party .NET 10 Android binding, so it
-   likely means an Android binding library project. Timebox a spike before committing.
-   **Set expectations:** ARCore yields planes and depth, which map onto the existing
-   shell primitives (floor, walls) — it does not yield "that is a workbench". Semantic
-   classification is a separate ML problem, and the correction flow already lets a user
-   name things, which may be the honest Phase 2 answer.
+3. **Verify capture on hardware** — see the top of this file. Built, never run.
+4. **Objects are not classified, by design.** ARCore reports surfaces, not
+   "workbench", so a scan produces shell geometry and no object candidates. The
+   correction flow already lets a user name things; whether that is the shipped
+   answer or a classifier follows is a product decision, not a bug.
 5. **Decide: does the sample garage stay linkable?** SPEC unresolved question #1 said
    decide before step 7 and step 7 shipped without it. Currently moot on this device —
    the data wipe re-seeded the garage unlinked, and the locator now logs
