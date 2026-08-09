@@ -1,20 +1,39 @@
 # HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
 Updated: 2026-08-07 22:15
 
-## Capture is built and has never run on hardware
+## Capture: pipeline verified, ARCore adapter not
 
 **The app can now observe real geometry.** `ISpatialCaptureAdapter.CaptureAsync`
 had been declared since the first build and never once called; there is now an
 ARCore adapter behind it, an assembler folding observations into the room, and a
-`Scan this room` button. 4 TFMs clean, 135 tests, **zero device time** — the Pixel
-disconnected before any of it could be deployed.
+`Scan this room` button. 4 TFMs clean, 135 tests.
+
+**The pipeline is runtime-verified on desktop** via `AWARE_SIMULATE_CAPTURE=1`
+(the counterpart to `AWARE_SIMULATE_SENSORS`; unset, the app still reports the
+Simulation tier and hides the scan). Driven against a recognition-only room:
+the label switches between `Scan this room` and `Scan again`, the recognition line
+counts live (`Scanning this room · 18 surfaces · 3 objects`), the model assembles
+progressively, Measure and Memories come alive mid-scan, and the room persists
+under its **original id and name** — `Place A`, `modelVersion` 0 → 4, 362 bytes →
+11521 — reloading modelled after a restart. That chain is SPEC's untested
+recognition-only-becomes-modelled transition, now proven.
+
+```powershell
+$env:AWARE_SIMULATE_CAPTURE = "1"
+Start-Process Aware\bin\Release\net10.0-desktop\Aware.exe
+```
+
+**What remains unverified is the ARCore adapter itself** — zero device time. The
+assembler, view model, persistence and rendering beneath it are all proven, so a
+failure on the phone is almost certainly in `ArCoreCaptureAdapter`, not below it.
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.16.8-hotspot"
 dotnet build Aware/Aware.csproj -f net10.0-android -c Debug -t:Run   # Debug ONLY
 ```
 
-What to check, in order — each step can fail independently:
+What to check on the phone, in order — each step can fail independently, and
+everything downstream of step 3 is already proven on desktop:
 
 1. **Does `Scan this room` appear at all?** It is bound to `CanCapture`, which is
    false unless `ArCoreApk.CheckAvailability` reports supported. Absent means
