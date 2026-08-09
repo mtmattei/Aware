@@ -39,4 +39,14 @@
     </UnoFeatures>
   </PropertyGroup>
 
+  <!--
+    Real geometry capture. ARCore ships as a Java AAR with no first-party .NET
+    binding, so this is a community binding of the same AAR. Android only: every
+    other target keeps the simulation adapter, and no ARCore type is allowed past
+    ISpatialCaptureAdapter (09-UNO-NOTES).
+  -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="EngageSolutionsGroup.Google.AR.Core" />
+  </ItemGroup>
+
 </Project>

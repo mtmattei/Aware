@@ -45,6 +45,8 @@
     <Compile Include="..\..\Aware\Application\RecognitionMessages.cs" Link="Linked\Application\RecognitionMessages.cs" />
     <Compile Include="..\..\Aware\Application\RoomLocator.cs" Link="Linked\Application\RoomLocator.cs" />
     <Compile Include="..\..\Aware\Application\RoomListMessages.cs" Link="Linked\Application\RoomListMessages.cs" />
+    <Compile Include="..\..\Aware\Application\ObservationAssembler.cs" Link="Linked\Application\ObservationAssembler.cs" />
+    <Compile Include="..\..\Aware\Platform\ISpatialCaptureAdapter.cs" Link="Linked\Platform\ISpatialCaptureAdapter.cs" />
 
     <Compile Include="..\..\Aware\Infrastructure\SampleGarageFactory.cs" Link="Linked\Infrastructure\SampleGarageFactory.cs" />
     <Compile Include="..\..\Aware\Infrastructure\SpatialJson.cs" Link="Linked\Infrastructure\SpatialJson.cs" />

@@ -49,11 +49,20 @@ public partial class App : Microsoft.UI.Xaml.Application
                     services.AddSingleton<IRoomLocator, RoomLocator>();
                     services.AddSingleton<IRenderSnapshotFactory, RenderSnapshotFactory>();
                     services.AddSingleton<IObjectActionResolver, ObjectActionResolver>();
+                    services.AddSingleton<IObservationAssembler, ObservationAssembler>();
                     services.AddSingleton<IPrivacyService, PrivacyService>();
 
                     // Platform adapters. Swapping the capture tier is a single
                     // registration change; the experience above it is unchanged.
+#if __ANDROID__
+                    // Real geometry from ARCore's plane detection. Falls back at
+                    // runtime, not here: GetCapabilitiesAsync reports Simulation on
+                    // hardware ARCore does not support, and the scan affordance is
+                    // hidden on that tier rather than offered and failing.
+                    services.AddSingleton<ISpatialCaptureAdapter, ArCoreCaptureAdapter>();
+#else
                     services.AddSingleton<ISpatialCaptureAdapter, SimulationCaptureAdapter>();
+#endif
                     services.AddSingleton<IHapticsService, HapticsService>();
 
                     // The only line that changes with the capability tier. On

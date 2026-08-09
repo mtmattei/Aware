@@ -244,6 +244,19 @@
                 AutomationProperties.Name="Link this room to the place you are in"
                 AutomationProperties.HelpText="Stores the ambient signals around you so Aware can recognize this room later." />
 
+        <!-- Observe the room's actual shape. Hidden on the simulation tier, where
+             the adapter replays a seeded model and calling that a scan would be
+             the one thing the capability tiers exist to prevent. -->
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="{Binding ScanLabel}"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Left"
+                IsEnabled="{Binding CanScan}"
+                Command="{Binding ScanRoomCommand}"
+                Visibility="{Binding CanCapture, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="Scan this room"
+                AutomationProperties.HelpText="Uses the camera to observe the room's surfaces and build its shape. No image is stored." />
+
         <!-- Set up the room you are standing in. Hidden where nothing can be
              sensed, since a room with no fingerprint could never be recognized. -->
         <Button Style="{StaticResource AwareQuietButtonStyle}"

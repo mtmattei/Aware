@@ -51,6 +51,15 @@
   -->
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
                    android:usesPermissionFlags="neverForLocation" />
+  <!--
+    Room capture. ARCore tracks from the camera image, so there is no way to
+    observe geometry without it. No frame is stored or transmitted: only plane
+    extents and poses cross ISpatialCaptureAdapter (07-DATA-PRIVACY).
+  -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+  <meta-data android:name="com.google.ar.core" android:value="optional" />
+
   <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 

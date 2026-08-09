@@ -25,6 +25,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     private readonly IRoomLocator _locator;
     private readonly IRenderSnapshotFactory _snapshots;
     private readonly IObjectActionResolver _actions;
+    private readonly IObservationAssembler _assembler;
     private readonly ISpatialCaptureAdapter _capture;
     private readonly IRoomFingerprintProvider _fingerprints;
     private readonly IPrivacyService _privacy;
@@ -68,6 +69,33 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool showRoomList;
 
+    /// <summary>True while a capture is streaming observations into the room.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    [NotifyPropertyChangedFor(nameof(ScanLabel))]
+    private bool isScanning;
+
+    /// <summary>
+    /// True where this device can actually observe geometry. False on the
+    /// simulation tier, where offering to scan would promise something the
+    /// adapter cannot do.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    private bool canCapture;
+
+    public bool CanScan => CanCapture && !IsScanning;
+
+    /// <summary>
+    /// Names what the button will do to <em>this</em> room: a room with no shape
+    /// is being mapped for the first time, one that already has a shape is being
+    /// improved. The distinction matters because scanning never replaces a model
+    /// — it refines the one already stored under this room's id.
+    /// </summary>
+    public string ScanLabel => IsScanning
+        ? "Scanning…"
+        : HasModel ? "Scan again" : "Scan this room";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanConfirmAddPlace))]
     private string newPlaceName = string.Empty;
@@ -79,7 +107,9 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     /// than hidden: the triad is fixed (01-PRODUCT-BRIEF, "lenses, not separate
     /// apps"), and hiding two of three would teach the wrong model of the app.
     /// </summary>
-    [ObservableProperty] private bool hasModel = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ScanLabel))]
+    private bool hasModel = true;
 
     /// <summary>Said once, under the empty floor, rather than on every lens.</summary>
     [ObservableProperty] private string? unmodelledNote;
@@ -100,6 +130,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         IRoomLocator locator,
         IRenderSnapshotFactory snapshots,
         IObjectActionResolver actions,
+        IObservationAssembler assembler,
         ISpatialCaptureAdapter capture,
         IRoomFingerprintProvider fingerprints,
         IPrivacyService privacy,
@@ -113,6 +144,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         _locator = locator;
         _snapshots = snapshots;
         _actions = actions;
+        _assembler = assembler;
         _capture = capture;
         _fingerprints = fingerprints;
         _privacy = privacy;
@@ -193,6 +225,11 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         CaptureCapability = _fingerprints.IsAvailable
             ? $"{capabilities.Summary} · {_fingerprints.Summary}"
             : capabilities.Summary;
+
+        // Offered only where geometry can genuinely be observed. On the simulation
+        // tier the adapter replays a seeded room, and dressing that up as scanning
+        // would be the one thing the capability tiers exist to prevent.
+        CanCapture = capabilities.HighestCapability != SpatialCaptureCapability.Simulation;
 
         ShowOnboarding = !HasSeenOnboarding();
 
@@ -365,6 +402,107 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         }
 
         await OpenAsync(room, ct);
+    }
+
+    /// <summary>
+    /// Scans the room the device is standing in and folds what it observes into
+    /// the open room's geometry, saving under the same <see cref="RoomId"/>.
+    ///
+    /// <para>Keeping the id is the whole point of doing it this way: a
+    /// recognition-only room becomes a modelled one without becoming a different
+    /// room, so its name, its place and anything already attached to it survive
+    /// gaining a shape. That transition is what SPEC left untested.</para>
+    ///
+    /// <para>Observations are applied as they arrive rather than at the end, so
+    /// the model assembles in front of the user — the progressive reconstruction
+    /// 02-UX-FLOWS asks for, driven by a real sensor rather than a replay.</para>
+    /// </summary>
+    [RelayCommand]
+    private async Task ScanRoomAsync()
+    {
+        if (_room is null || IsScanning) return;
+
+        var ct = _lifetime.Token;
+
+        IsScanning = true;
+        SelectedObjectId = null;
+        StatusMessage = null;
+        RecognitionMessage = "Scanning this room";
+
+        var request = new SpatialCaptureRequest(
+            ExistingRoomId: _room.Id,
+            IncludeImages: false,
+            IncludeDepth: true,
+            MaximumDuration: TimeSpan.FromSeconds(45));
+
+        var observations = 0;
+
+        try
+        {
+            await foreach (var observation in _capture.CaptureAsync(request, ct))
+            {
+                observations++;
+
+                _room = _assembler.Apply(_room, observation);
+
+                RebuildObjectList();
+                Refresh();
+                ApplyModelledState();
+
+                RecognitionMessage =
+                    $"Scanning this room · {_room.Shell.Count} surfaces · {_room.Objects.Count} objects";
+            }
+
+            if (observations == 0)
+            {
+                StatusMessage = "Nothing was observed. Move the phone slowly around the room and try again.";
+                return;
+            }
+
+            await _rooms.SaveRoomAsync(_room, ct);
+
+            StatusMessage = $"{_room.Name} now has a model: " +
+                            $"{_room.Shell.Count} surfaces and {_room.Objects.Count} objects.";
+
+            _haptics.Play(HapticKind.Confirm);
+        }
+        catch (OperationCanceledException)
+        {
+            // Left the page mid-scan. Whatever was observed stays in memory only.
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "The room scan failed.");
+            StatusMessage = "The scan stopped early. Anything already observed was kept.";
+
+            // Partial geometry is still geometry, and losing it because the
+            // session dropped would be worse than keeping a half-scanned room.
+            if (observations > 0)
+            {
+                try { await _rooms.SaveRoomAsync(_room, ct); }
+                catch (Exception saveEx) { _log.LogError(saveEx, "Could not save the partial scan."); }
+            }
+        }
+        finally
+        {
+            IsScanning = false;
+            ApplyModelledState();
+
+            // Restate where the device is, rather than leaving "Scanning" on
+            // screen. Recomputed from the reading recognition already took, so
+            // scanning never re-senses the place — and the percentage now
+            // describes geometry that genuinely exists.
+            var comparison = _room?.Fingerprint is { } stamp
+                             && _recognition.LastReading is { HasAnySignal: true } reading
+                ? _matcher.Compare(stamp, reading)
+                : null;
+
+            RecognitionMessage = RecognitionMessages.Settled(
+                _room?.Confidence ?? 0f,
+                comparison,
+                CanLinkPlace,
+                _room?.IsModelled ?? false);
+        }
     }
 
     /// <summary>Leaves the list for the naming sheet, which already exists here.</summary>
