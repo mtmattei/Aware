@@ -59,6 +59,48 @@ the fix is to create the texture on a thread with a live GL context, or host an
 offscreen `GLSurfaceView`. This is the one part of the design that was reasoned
 about rather than measured.
 
+## Privacy controls: built, pause verified, the rest not click-verified
+
+`07-DATA-PRIVACY` specifies export and erasure and `PrivacyService` always
+implemented both — nothing could reach either. There is now a **Privacy** sheet
+(top right): pause awareness, export this room, forget everything. **Room deletion**
+sits in the room list, on every room except the one open.
+
+**Only `AwarenessPaused` is a control.** The other three `PrivacySettings` are
+honoured by no code — no cloud exists, no image is ever kept, nothing listens — so
+they are stated as facts in the sheet rather than offered as switches that would
+move and change nothing. Do not "finish" them by wiring toggles; wire the
+behaviour first or leave them stated.
+
+**Verified:** paused reads `100% confident · awareness paused`, no place clause,
+`Scan` disabled, `Add this place` absent. Worth knowing *how* that was checked,
+because the obvious gate was wrong: writing `privacy.json` with
+`"awarenessPaused":true` and launching with `AWARE_SIMULATE_SENSORS=1` caught that
+gating the fingerprint read stops the locator but **not** recognition —
+`SensorRoomRecognitionService` takes its own reading when handed null, so the app
+still said "you are here · 4 signals match" while claiming to be paused.
+
+**Not verified:** export, delete, forget-everything. Built, no unit test possible
+(`PrivacyService` needs `Windows.Storage`), and not click-verified — see below.
+
+## The input harness is unreliable again
+
+`tools/Send-Input.ps1` silently misses whenever the app is not foreground, and
+`SetForegroundWindow` is refused to a background process. Two new symptoms seen
+this session, both of which look like "the app ignored my click":
+
+- **A minimized window still screenshots normally.** `PrintWindow` captures it, so
+  the capture looks right while every click lands at screen (−32000, −32000).
+  Check `IsIconic` before believing a capture.
+- Landing drifted by a few hundred px with the window restored and stationary.
+  `tools/Diagnose-Input.ps1` prints aim-vs-landing; error (0,0) means input is fine.
+
+`uno_app_start` **now works** for the Debug desktop build (the renderer lifecycle
+fix in `1f9babc` was what killed it before), so peer actions are the better route —
+but the DevServer opened **Hot Design** over the app, which per the project
+gotchas kills screenshots and the Skia canvas for the rest of the process. Exit it
+before driving, or launch Release and fix the foreground problem.
+
 ## Do this first: the walk test
 
 Everything is deployed on the Pixel and **the positive half is verified**. Standing
