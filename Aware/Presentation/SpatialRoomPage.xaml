@@ -322,6 +322,11 @@
                 Content="Motion"
                 Command="{Binding ToggleReducedMotionCommand}"
                 AutomationProperties.Name="Toggle reduced motion" />
+        <Button Style="{StaticResource AwareQuietButtonStyle}"
+                Content="Privacy"
+                Command="{Binding OpenPrivacyCommand}"
+                AutomationProperties.Name="Privacy and stored data"
+                AutomationProperties.HelpText="Pause sensing, export this room, or erase everything stored on this device." />
       </StackPanel>
 
 
@@ -505,6 +510,93 @@
         </Grid>
       </Border>
 
+      <!-- Privacy and stored data. The service has always been able to export and
+           erase; nothing could reach either until now, so the promise made on the
+           first onboarding screen was one the user had no control over. -->
+      <Grid Background="{StaticResource AwareScrimBrush}"
+            Visibility="{Binding ShowPrivacy, Converter={StaticResource BoolToVisibility}}">
+        <Border MaxWidth="460"
+                Margin="24"
+                Padding="26"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                CornerRadius="{StaticResource AwareTrayRadius}"
+                Background="{StaticResource AwareCanvasNearBrush}">
+          <StackPanel Spacing="12">
+            <local:TrackedText Text="PRIVACY"
+                               Tracking="3"
+                               TextStyle="{StaticResource AwareEyebrowTextStyle}" />
+
+            <TextBlock Text="Everything Aware knows is on this device"
+                       Style="{StaticResource AwareTrayTitleTextStyle}" />
+
+            <!-- Stated, not switched. There is no cloud to sync to, no image is
+                 ever kept, and nothing listens — so these are facts about how the
+                 app is built. Offering them as toggles would be three controls
+                 that move and change nothing. -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="No camera image is stored. A scan reads surfaces and keeps their shape, nothing else."
+                         Style="{StaticResource AwareSupportTextStyle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Nothing is synced. There is no account and no server to send it to."
+                         Style="{StaticResource AwareSupportTextStyle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Room signals are stored as hashes, never as network or device names."
+                         Style="{StaticResource AwareSupportTextStyle}"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Height="1" Background="{StaticResource AwareHairlineBrush}" Margin="0,4" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{Binding AwarenessLabel}"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding ToggleAwarenessPausedCommand}"
+                      AutomationProperties.HelpText="While paused, no sensor is read and no room is recognized." />
+
+              <Button Content="Export this room"
+                      Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Command="{Binding ExportRoomCommand}"
+                      AutomationProperties.HelpText="Writes this room's model out as readable JSON." />
+            </StackPanel>
+
+            <TextBlock Text="{Binding ExportedPath}"
+                       Style="{StaticResource AwareSupportTextStyle}"
+                       TextWrapping="Wrap"
+                       IsTextSelectionEnabled="True"
+                       Visibility="{Binding ExportedPath, Converter={StaticResource NotEmptyToVisibility}}" />
+
+            <Border Height="1" Background="{StaticResource AwareHairlineBrush}" Margin="0,4" />
+
+            <!-- The only irreversible action in the app, so the second tap says
+                 what it destroys rather than repeating the first. -->
+            <TextBlock Text="This erases every room, every correction and every place Aware has learned. It cannot be undone."
+                       Style="{StaticResource AwareSupportTextStyle}"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding ConfirmForget, Converter={StaticResource BoolToVisibility}}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Style="{StaticResource AwareSecondaryButtonStyle}"
+                      Content="Forget everything"
+                      Command="{Binding ForgetEverythingCommand}"
+                      Visibility="{Binding ConfirmForget, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}"
+                      AutomationProperties.Name="Forget everything stored on this device" />
+
+              <Button Style="{StaticResource AwarePrimaryButtonStyle}"
+                      Content="Yes, erase everything"
+                      Command="{Binding ForgetEverythingCommand}"
+                      Visibility="{Binding ConfirmForget, Converter={StaticResource BoolToVisibility}}"
+                      AutomationProperties.Name="Confirm erasing everything stored on this device" />
+
+              <Button Content="Close"
+                      Style="{StaticResource AwareQuietButtonStyle}"
+                      Command="{Binding ClosePrivacyCommand}"
+                      AutomationProperties.Name="Close privacy" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+
       <!-- Rooms on this device. An overlay for the same reason the sheets below
            are: it keeps the viewport mounted. As a separate route, returning from
            the list remounted the page owning the Skia canvas and the next room's
@@ -541,20 +633,39 @@
                             AutomationProperties.Name="Rooms stored on this device">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Button Style="{StaticResource AwareObjectRowButtonStyle}"
-                            Margin="0,0,0,2"
-                            Command="{Binding DataContext.ChooseRoomCommand, ElementName=Root}"
-                            CommandParameter="{Binding}"
-                            Background="{Binding IsCurrent, Converter={StaticResource CurrentRoomBackground}}"
-                            AutomationProperties.Name="{Binding AutomationName}">
-                      <StackPanel Spacing="2">
-                        <TextBlock Text="{Binding Name}"
-                                   Style="{StaticResource AwareBodyTextStyle}"
-                                   FontSize="16" />
-                        <TextBlock Text="{Binding Reason}"
-                                   Style="{StaticResource AwareSupportTextStyle}" />
-                      </StackPanel>
-                    </Button>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+
+                      <Button Style="{StaticResource AwareObjectRowButtonStyle}"
+                              Margin="0,0,0,2"
+                              Command="{Binding DataContext.ChooseRoomCommand, ElementName=Root}"
+                              CommandParameter="{Binding}"
+                              Background="{Binding IsCurrent, Converter={StaticResource CurrentRoomBackground}}"
+                              AutomationProperties.Name="{Binding AutomationName}">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding Name}"
+                                     Style="{StaticResource AwareBodyTextStyle}"
+                                     FontSize="16" />
+                          <TextBlock Text="{Binding Reason}"
+                                     Style="{StaticResource AwareSupportTextStyle}" />
+                        </StackPanel>
+                      </Button>
+
+                      <!-- Not offered for the open room: deleting what is on
+                           screen would leave the viewport drawing something that
+                           no longer exists. -->
+                      <Button Grid.Column="1"
+                              Style="{StaticResource AwareQuietButtonStyle}"
+                              Content="Delete"
+                              VerticalAlignment="Center"
+                              Command="{Binding DataContext.DeleteRoomCommand, ElementName=Root}"
+                              CommandParameter="{Binding}"
+                              Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}"
+                              AutomationProperties.Name="{Binding DeleteAutomationName}" />
+                    </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>

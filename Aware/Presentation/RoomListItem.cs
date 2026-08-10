@@ -20,5 +20,11 @@ public sealed record RoomListItem(
     public string AutomationName => IsCurrent
         ? $"{Name}, {Reason}, currently open"
         : $"{Name}, {Reason}";
+
+    /// <summary>
+    /// Names the room being deleted rather than saying "Delete" five times, which
+    /// is what a screen reader would otherwise read down the list.
+    /// </summary>
+    public string DeleteAutomationName => $"Delete {Name}";
 }
 

@@ -69,6 +69,25 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool showRoomList;
 
+    [ObservableProperty] private bool showPrivacy;
+
+    /// <summary>
+    /// True once the user has asked to forget everything and been shown what that
+    /// destroys. Erasure is the only irreversible action here, so it takes two.
+    /// </summary>
+    [ObservableProperty] private bool confirmForget;
+
+    /// <summary>Mirrors the stored setting so the sheet can show its state.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AwarenessLabel))]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    private bool awarenessPaused;
+
+    public string AwarenessLabel => AwarenessPaused ? "Resume awareness" : "Pause awareness";
+
+    /// <summary>Where the last export landed, so the user can go and find it.</summary>
+    [ObservableProperty] private string? exportedPath;
+
     /// <summary>True while a capture is streaming observations into the room.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanScan))]
@@ -84,7 +103,11 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CanScan))]
     private bool canCapture;
 
-    public bool CanScan => CanCapture && !IsScanning;
+    /// <summary>
+    /// Scanning is sensing, so a pause has to stop it too. Offering a camera scan
+    /// while the app says awareness is paused would make the pause a lie.
+    /// </summary>
+    public bool CanScan => CanCapture && !IsScanning && !AwarenessPaused;
 
     /// <summary>
     /// Names what the button will do to <em>this</em> room: a room with no shape
@@ -218,6 +241,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         var ct = _lifetime.Token;
 
         await _privacy.LoadAsync(ct);
+        AwarenessPaused = _privacy.Current.AwarenessPaused;
 
         var capabilities = await _capture.GetCapabilitiesAsync(ct);
 
@@ -257,6 +281,23 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         RoomName = _room.Name;
         RebuildObjectList();
         Refresh();
+
+        // Recognition takes its own reading when handed null, so gating the
+        // locator's read is not enough to honour a pause — it would sense again
+        // here and report "you are here" while the user believed nothing was
+        // being read. Paused therefore skips recognition entirely and says so.
+        if (_privacy.Current.AwarenessPaused)
+        {
+            RecognitionMessage = _room.IsModelled
+                ? $"{_room.Confidence * 100:0}% confident · awareness paused"
+                : "No model yet · awareness paused";
+            RecognitionProgress = 1f;
+            IsRoomStable = true;
+            CanLinkPlace = false;
+            CanAddPlace = false;
+            ApplyModelledState();
+            return;
+        }
 
         await foreach (var state in _recognition.RecognizeAsync(_room, reading, ct))
         {
@@ -505,6 +546,148 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ------------------------------------------------------------------
+    // Privacy (07-DATA-PRIVACY). The service has always implemented export and
+    // erasure; until now nothing in the app could reach either, so the promise
+    // made on the first onboarding screen was one the user had no control over.
+    // ------------------------------------------------------------------
+
+    [RelayCommand]
+    private void OpenPrivacy()
+    {
+        ConfirmForget = false;
+        ShowPrivacy = true;
+    }
+
+    [RelayCommand]
+    private void ClosePrivacy()
+    {
+        ConfirmForget = false;
+        ShowPrivacy = false;
+    }
+
+    /// <summary>
+    /// The one privacy switch that does something. The other three settings in
+    /// <see cref="PrivacySettings"/> are honoured by no code — there is no cloud
+    /// to sync to, no imagery is ever retained, and nothing listens — so they are
+    /// stated as facts in the sheet rather than offered as switches that would
+    /// move and change nothing.
+    /// </summary>
+    [RelayCommand]
+    private async Task ToggleAwarenessPausedAsync()
+    {
+        var ct = _lifetime.Token;
+        var paused = !_privacy.Current.AwarenessPaused;
+
+        await _privacy.SaveAsync(_privacy.Current with { AwarenessPaused = paused }, ct);
+
+        AwarenessPaused = paused;
+
+        StatusMessage = paused
+            ? "Awareness paused. No sensor is read until you resume."
+            : "Awareness resumed. Reopen the app to be recognized again.";
+    }
+
+    /// <summary>
+    /// Writes this room's model out as readable JSON and says where it went.
+    /// Reporting the path matters more than it sounds: an export the user cannot
+    /// find is not an export.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportRoomAsync()
+    {
+        if (_room is null) return;
+
+        try
+        {
+            var path = await _privacy.ExportModelAsync(_room.Id, _lifetime.Token);
+
+            ExportedPath = path;
+            StatusMessage = $"{_room.Name} exported to {path}";
+            _haptics.Play(HapticKind.Confirm);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not export the room model.");
+            StatusMessage = "Could not export this room.";
+        }
+    }
+
+    /// <summary>
+    /// Removes one room. Deliberately not offered for the room currently open:
+    /// deleting what is on screen leaves the viewport showing something that no
+    /// longer exists, and the fix would be a special case in every path below.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteRoomAsync(RoomListItem? item)
+    {
+        if (item is null || item.IsCurrent) return;
+
+        var ct = _lifetime.Token;
+
+        try
+        {
+            await _rooms.DeleteRoomAsync(item.Id, ct);
+            StatusMessage = $"{item.Name} was deleted from this device.";
+            _haptics.Play(HapticKind.Warning);
+
+            // Rebuild in place so the list the user is looking at is the truth.
+            await OpenRoomsAsync();
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not delete the room.");
+            StatusMessage = $"Could not delete {item.Name}.";
+        }
+    }
+
+    /// <summary>
+    /// Erases every room and every setting. Two taps rather than one, and the
+    /// second says what it will destroy — this is the only irreversible action
+    /// in the app.
+    /// </summary>
+    [RelayCommand]
+    private async Task ForgetEverythingAsync()
+    {
+        if (!ConfirmForget)
+        {
+            ConfirmForget = true;
+            return;
+        }
+
+        var ct = _lifetime.Token;
+
+        try
+        {
+            await _privacy.ForgetAllSpatialDataAsync(ct);
+
+            ConfirmForget = false;
+            ShowPrivacy = false;
+
+            // Everything on screen now describes rooms that no longer exist.
+            _room = null;
+            Snapshot = null;
+            Objects.Clear();
+            RoomList.Clear();
+            SelectedObjectId = null;
+            RoomName = "Nothing stored";
+            RecognitionMessage = "Everything Aware knew has been erased.";
+            RecognitionProgress = 0f;
+            AwarenessPaused = false;
+            CanLinkPlace = false;
+            HasModel = false;
+            UnmodelledNote = "Nothing is stored on this device. Add a place to start again.";
+            StatusMessage = null;
+
+            _haptics.Play(HapticKind.Warning);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not erase the stored data.");
+            StatusMessage = "Could not erase the stored data.";
+        }
+    }
+
     /// <summary>Leaves the list for the naming sheet, which already exists here.</summary>
     [RelayCommand]
     private void AddPlaceFromList()
@@ -635,6 +818,12 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task<FingerprintReading?> ReadPlaceAsync(CancellationToken ct)
     {
+        // Paused means paused: no sensor is read, so nothing is located, nothing
+        // is recognized, and the settled line falls back to describing the model
+        // alone. Gating here rather than at each call site means a signal cannot
+        // leak in through a path added later.
+        if (_privacy.Current.AwarenessPaused) return null;
+
         if (!_fingerprints.IsAvailable) return null;
 
         try
