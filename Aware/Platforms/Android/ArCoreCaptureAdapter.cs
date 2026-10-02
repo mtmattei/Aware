@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Android.Content;
 using Android.Content.PM;
 using Android.Opengl;
@@ -27,21 +28,32 @@ namespace Aware.Platform;
 /// yields shell geometry and no object candidates, and the room's contents stay
 /// whatever the user names through the correction flow. Claiming semantic
 /// classification here would be inventing evidence.</para>
+///
+/// <para><strong>Every scan runs on its own thread with its own GL context.</strong>
+/// ARCore needs a camera texture to write each frame into before
+/// <c>Session.Update()</c> will return anything, even when nothing is drawn, and
+/// GL textures only exist inside a context that is current on the calling thread.
+/// An <c>await</c> resumes wherever the scheduler puts it — here, the UI thread,
+/// which has no GL context of its own under Uno's Skia renderer — so creating the
+/// texture inline would return texture 0 and every frame would be silently dropped:
+/// a 45 s scan that observes nothing. The worker below makes a 1×1 pbuffer context
+/// current, creates the texture in it, and keeps resume, update and pause on that
+/// same thread, handing observations back over a channel.</para>
 /// </summary>
 public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
 {
-    /// <summary>
-    /// ARCore needs a GL texture to attach the camera image to before
-    /// <c>Session.Update()</c> will return frames, even when nothing is drawn.
-    /// Tracking is driven by that image, so there is no headless mode.
-    /// </summary>
     private const int NoTexture = 0;
+
+    /// <summary>
+    /// ~10 Hz. Faster gains nothing: planes are extended over seconds, and every
+    /// frame allocates a managed observation.
+    /// </summary>
+    private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly ILogger<ArCoreCaptureAdapter> _log;
     private readonly Context? _context;
 
     private Session? _session;
-    private int _textureId = NoTexture;
 
     public ArCoreCaptureAdapter(ILogger<ArCoreCaptureAdapter> log)
     {
@@ -110,41 +122,110 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
         var session = EnsureSession();
         if (session is null) yield break;
 
-        // The texture is created once and reused: ARCore rejects a session whose
-        // camera texture changes underneath it.
-        EnsureCameraTexture();
-        session.SetCameraTextureName(_textureId);
+        // Unbounded on purpose: the consumer applies each observation to the
+        // model on the UI thread, and at 10 Hz a backlog of a few frames is
+        // cheaper than deciding which plane snapshot to drop.
+        var observations = Channel.CreateUnbounded<SpatialObservation>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var stopToken = stop.Token;
+
+        // LongRunning gives the scan a thread of its own rather than a pool
+        // thread. The EGL context created inside is bound to that thread, so the
+        // whole scan has to stay on it from first call to last.
+        var worker = Task.Factory.StartNew(
+            () => RunScan(session, request.MaximumDuration, observations.Writer, stopToken),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
         try
         {
-            session.Resume();
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Could not resume the ARCore session.");
-            yield break;
-        }
-
-        var deadline = DateTimeOffset.Now + request.MaximumDuration;
-
-        try
-        {
-            while (DateTimeOffset.Now < deadline)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                // ~10 Hz. Faster gains nothing: planes are extended over seconds,
-                // and every frame allocates a managed observation.
-                await Task.Delay(100, ct);
-
-                var observation = ReadPlanes(session);
-                if (observation is not null) yield return observation;
-            }
+            await foreach (var observation in observations.Reader.ReadAllAsync(ct))
+                yield return observation;
         }
         finally
         {
-            try { session.Pause(); }
-            catch (Exception ex) { _log.LogWarning(ex, "Could not pause the ARCore session."); }
+            // Reached on completion, on cancellation and when the consumer stops
+            // enumerating early. The worker pauses the session and tears down its
+            // GL context on its way out; waiting for it keeps that teardown from
+            // overlapping the next scan's setup.
+            stop.Cancel();
+            try { await worker; }
+            catch (Exception ex) { _log.LogWarning(ex, "The scan worker did not stop cleanly."); }
+        }
+    }
+
+    /// <summary>
+    /// The whole of one scan, on one thread: GL context, camera texture, resume,
+    /// the update loop, pause, teardown. Runs synchronously so nothing can hop
+    /// threads between the context being made current and the last GL call.
+    /// </summary>
+    private void RunScan(
+        Session session,
+        TimeSpan maximumDuration,
+        ChannelWriter<SpatialObservation> writer,
+        CancellationToken ct)
+    {
+        OffscreenGlContext? gl = null;
+        var textureId = NoTexture;
+        var resumed = false;
+
+        try
+        {
+            gl = OffscreenGlContext.Create();
+            if (gl is null)
+            {
+                writer.TryComplete(new InvalidOperationException(
+                    $"No offscreen GL context could be created for the camera texture (EGL error 0x{EGL14.EglGetError():X})."));
+                return;
+            }
+
+            textureId = CreateCameraTexture();
+            if (textureId == NoTexture)
+            {
+                writer.TryComplete(new InvalidOperationException(
+                    $"The camera texture could not be created (GL error 0x{GLES20.GlGetError():X})."));
+                return;
+            }
+
+            session.SetCameraTextureName(textureId);
+            session.Resume();
+            resumed = true;
+
+            var deadline = DateTimeOffset.Now + maximumDuration;
+
+            while (DateTimeOffset.Now < deadline && !ct.IsCancellationRequested)
+            {
+                // Wakes early on cancellation instead of sleeping through it.
+                if (ct.WaitHandle.WaitOne(FrameInterval)) break;
+
+                var observation = ReadPlanes(session);
+                if (observation is not null) writer.TryWrite(observation);
+            }
+
+            writer.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "The ARCore scan failed.");
+            writer.TryComplete(ex);
+        }
+        finally
+        {
+            if (resumed)
+            {
+                try { session.Pause(); }
+                catch (Exception ex) { _log.LogWarning(ex, "Could not pause the ARCore session."); }
+            }
+
+            // The texture dies with its context; deleting it first just keeps
+            // the GL error state clean for the next scan on a fresh context.
+            if (textureId != NoTexture)
+                GLES20.GlDeleteTextures(1, [textureId], 0);
+
+            gl?.Dispose();
         }
     }
 
@@ -235,11 +316,6 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
     }
 
     /// <summary>
-    /// Rotation about Y, recovered from the pose quaternion. Only yaw is kept:
-    /// the renderer's primitives are axis-aligned boxes with a single rotation
-    /// per axis, and a wall's tilt is noise rather than shape.
-    /// </summary>
-    /// <summary>
     /// The pose's local +Y in world space, which for an ARCore plane is its
     /// surface normal.
     /// </summary>
@@ -250,6 +326,11 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
         return new Vector3(axis[0], axis[1], axis[2]);
     }
 
+    /// <summary>
+    /// Rotation about Y, recovered from the pose quaternion. Only yaw is kept:
+    /// the renderer's primitives are axis-aligned boxes with a single rotation
+    /// per axis, and a wall's tilt is noise rather than shape.
+    /// </summary>
     private static float YawOf(Pose pose)
     {
         var q = new float[4];
@@ -272,8 +353,8 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
 
             var config = new Config(session);
             config.SetPlaneFindingMode(Config.PlaneFindingMode.HorizontalAndVertical);
-            // Blocking would stall the UI thread on every frame; ARCore is
-            // explicitly designed to be polled.
+            // Blocking would stall the scan thread for a whole camera frame on
+            // every update; ARCore is explicitly designed to be polled.
             config.SetUpdateMode(Config.UpdateMode.LatestCameraImage);
 
             if (session.IsDepthModeSupported(Config.DepthMode.Automatic))
@@ -290,17 +371,24 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
         }
     }
 
-    private void EnsureCameraTexture()
+    /// <summary>
+    /// The external texture ARCore writes camera frames into. Must be called with
+    /// a GL context current on this thread; without one <c>glGenTextures</c>
+    /// returns 0 and sets <c>GL_INVALID_OPERATION</c>, which the caller reports.
+    /// </summary>
+    private static int CreateCameraTexture()
     {
-        if (_textureId != NoTexture) return;
-
         var ids = new int[1];
         GLES20.GlGenTextures(1, ids, 0);
-        _textureId = ids[0];
+        var id = ids[0];
+        if (id == NoTexture) return NoTexture;
 
-        GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, _textureId);
+        GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, id);
+        GLES20.GlTexParameteri(GLES11Ext.GlTextureExternalOes, GLES20.GlTextureWrapS, GLES20.GlClampToEdge);
+        GLES20.GlTexParameteri(GLES11Ext.GlTextureExternalOes, GLES20.GlTextureWrapT, GLES20.GlClampToEdge);
         GLES20.GlTexParameteri(GLES11Ext.GlTextureExternalOes, GLES20.GlTextureMinFilter, GLES20.GlLinear);
         GLES20.GlTexParameteri(GLES11Ext.GlTextureExternalOes, GLES20.GlTextureMagFilter, GLES20.GlLinear);
+        return id;
     }
 
     /// <summary>
@@ -344,5 +432,86 @@ public sealed class ArCoreCaptureAdapter : ISpatialCaptureAdapter, IDisposable
         catch (Exception ex) { _log.LogWarning(ex, "Could not close the ARCore session."); }
 
         _session = null;
+    }
+
+    /// <summary>
+    /// A GL ES 2 context made current on the calling thread against a 1×1
+    /// pbuffer. Nothing is ever drawn into it; it exists so that the camera
+    /// texture has a context to live in and <c>Session.Update()</c> has one to
+    /// write into. Thread-affine: create, use and dispose on the same thread.
+    /// </summary>
+    private sealed class OffscreenGlContext : IDisposable
+    {
+        private readonly EGLDisplay _display;
+        private readonly EGLSurface _surface;
+        private readonly EGLContext _context;
+
+        private OffscreenGlContext(EGLDisplay display, EGLSurface surface, EGLContext context)
+        {
+            _display = display;
+            _surface = surface;
+            _context = context;
+        }
+
+        public static OffscreenGlContext? Create()
+        {
+            // The EGL sentinels are Java objects; Equals compares their handles,
+            // where == would only compare managed peers.
+            var display = EGL14.EglGetDisplay(EGL14.EglDefaultDisplay);
+            if (display is null || display.Equals(EGL14.EglNoDisplay)) return null;
+
+            // Initialising an already-initialised display (the renderer's) is
+            // allowed and only reports the version; it does not reset anything.
+            if (!EGL14.EglInitialize(display, new int[1], 0, new int[1], 0)) return null;
+
+            int[] configAttributes =
+            [
+                EGL14.EglRenderableType, EGL14.EglOpenglEs2Bit,
+                EGL14.EglSurfaceType, EGL14.EglPbufferBit,
+                EGL14.EglRedSize, 8,
+                EGL14.EglGreenSize, 8,
+                EGL14.EglBlueSize, 8,
+                EGL14.EglAlphaSize, 8,
+                EGL14.EglNone,
+            ];
+
+            var configs = new EGLConfig[1];
+            var configCount = new int[1];
+            if (!EGL14.EglChooseConfig(display, configAttributes, 0, configs, 0, 1, configCount, 0)
+                || configCount[0] == 0
+                || configs[0] is not { } config)
+                return null;
+
+            int[] contextAttributes = [EGL14.EglContextClientVersion, 2, EGL14.EglNone];
+            var context = EGL14.EglCreateContext(display, config, EGL14.EglNoContext, contextAttributes, 0);
+            if (context is null || context.Equals(EGL14.EglNoContext)) return null;
+
+            int[] surfaceAttributes = [EGL14.EglWidth, 1, EGL14.EglHeight, 1, EGL14.EglNone];
+            var surface = EGL14.EglCreatePbufferSurface(display, config, surfaceAttributes, 0);
+            if (surface is null || surface.Equals(EGL14.EglNoSurface))
+            {
+                EGL14.EglDestroyContext(display, context);
+                return null;
+            }
+
+            if (!EGL14.EglMakeCurrent(display, surface, surface, context))
+            {
+                EGL14.EglDestroySurface(display, surface);
+                EGL14.EglDestroyContext(display, context);
+                return null;
+            }
+
+            return new OffscreenGlContext(display, surface, context);
+        }
+
+        public void Dispose()
+        {
+            EGL14.EglMakeCurrent(_display, EGL14.EglNoSurface, EGL14.EglNoSurface, EGL14.EglNoContext);
+            EGL14.EglDestroySurface(_display, _surface);
+            EGL14.EglDestroyContext(_display, _context);
+            // Drops this thread's EGL bookkeeping. The display itself is shared
+            // with Uno's renderer and is deliberately never terminated here.
+            EGL14.EglReleaseThread();
+        }
     }
 }
