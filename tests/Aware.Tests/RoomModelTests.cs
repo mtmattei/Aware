@@ -299,7 +299,9 @@ public class RoomModelTests
     [Fact]
     public async Task AnUnlinkedRoomReportsNoPlaceRatherThanAContradiction()
     {
-        var room = Room();
+        // A room the user built, not the seeded sample: the sample is never
+        // offered a link, so it settles on the brief's line instead (PlaceLinkingTests).
+        var room = Room() with { Id = new RoomId("room-workshop-002"), Name = "Workshop" };
         var recognizer = Recognizer(FakeFingerprints.Matching(TestFingerprint));
 
         var final = await FinalState(recognizer, room);

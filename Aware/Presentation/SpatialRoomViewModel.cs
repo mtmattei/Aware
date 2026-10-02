@@ -258,7 +258,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
         ShowOnboarding = !HasSeenOnboarding();
 
         // Seeding still runs, so the sample exists on a fresh install.
-        var seeded = await _rooms.GetRoomAsync(SampleGarageFactoryId, ct);
+        var seeded = await _rooms.GetRoomAsync(SampleGarageFactory.GarageId, ct);
         var rooms = await _rooms.GetRoomsAsync(ct);
 
         // Which room opens is the whole point: take one reading and let the place
@@ -308,8 +308,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
 
         // Only offered once recognition has settled, so the reading it would store
         // is the one the user just watched being taken.
-        CanLinkPlace = _room is { Fingerprint: null }
-                       && _recognition.LastReading is { HasAnySignal: true };
+        CanLinkPlace = PlaceLinking.CanLink(_room, _recognition.LastReading);
 
         CanAddPlace = _fingerprints.IsAvailable;
         ApplyModelledState();
@@ -774,8 +773,7 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
             IsRoomStable = state.IsStable;
         }
 
-        CanLinkPlace = _room is { Fingerprint: null }
-                       && _recognition.LastReading is { HasAnySignal: true };
+        CanLinkPlace = PlaceLinking.CanLink(_room, _recognition.LastReading);
 
         // The room being switched to may be modelled or not, so the lens state and
         // the empty-floor note have to be recomputed here as well as on load. Adding
@@ -792,8 +790,10 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task LinkPlaceAsync()
     {
-        if (_room is null) return;
-        if (_recognition.LastReading is not { HasAnySignal: true } reading) return;
+        // Guarded here as well as on the button: the sample garage must never be
+        // tied to a place, however the command is reached.
+        if (_recognition.LastReading is not { } reading) return;
+        if (_room is null || !PlaceLinking.CanLink(_room, reading)) return;
 
         _room = _room.LinkedTo(reading.Fingerprint);
         await _rooms.SaveRoomAsync(_room, _lifetime.Token);
@@ -809,8 +809,6 @@ public partial class SpatialRoomViewModel : ObservableObject, IDisposable
                         "Aware will recognize it from here on, and say so when you are somewhere else.";
         _haptics.Play(HapticKind.Confirm);
     }
-
-    private static RoomId SampleGarageFactoryId => new("room-garage-001");
 
     /// <summary>
     /// One reading for the whole launch. Failure degrades to "no sensors" rather

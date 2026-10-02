@@ -11,6 +11,13 @@ namespace Aware.Infrastructure;
 public static class SampleGarageFactory
 {
     public static readonly RoomId GarageId = new("room-garage-001");
+
+    /// <summary>
+    /// Whether a room is the seeded sample rather than somewhere the user has
+    /// been. The sample is identified by its id: it is re-seeded under the same
+    /// one whenever the store is empty, and a real room is never given it.
+    /// </summary>
+    public static bool IsSample(RoomId id) => id == GarageId;
     private static readonly ProjectId CabinetProject = new("project-cabinet-001");
 
     // Room shell footprint, in metres.

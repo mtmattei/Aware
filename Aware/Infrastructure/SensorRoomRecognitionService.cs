@@ -77,7 +77,7 @@ public sealed class SensorRoomRecognitionService : IRoomRecognitionService
             : null;
         LastComparison = comparison;
 
-        var canLink = live.HasAnySignal && room.Fingerprint is null;
+        var canLink = PlaceLinking.CanLink(room, live);
 
         // "Known objects matching" would be a lie about a room with no objects,
         // so a recognition-only room skips straight to its verdict.
