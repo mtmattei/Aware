@@ -105,6 +105,38 @@ still said "you are here · 4 signals match" while claiming to be paused.
 
 **Not verified:** export, delete, forget-everything. Built, no unit test possible
 (`PrivacyService` needs `Windows.Storage`), and not click-verified — see below.
+Read-through on 2026-10-02 found three things worth knowing before clicking:
+
+- **Fixed: forget-everything left exports behind.** Exports live beside
+  `privacy.json`, outside `spatial/`, so `DeleteAllAsync` never saw them — the
+  originals went and the full copies stayed. `ForgetAllSpatialDataAsync` now
+  deletes every `*-export.json` too.
+- **Open: forget-everything re-seeds the garage on the next repository call.**
+  `JsonRoomRepository.LoadAsync` seeds the sample whenever the store is empty, so
+  after "Everything Aware knew has been erased" and the note "Nothing is stored on
+  this device", opening the room list will show `Your Garage` again. The line is not
+  false — the sample is fiction, not something Aware knew — but the note is. Product
+  call: either return to the pristine first-launch state explicitly (re-seed and open
+  the garage, drop the "nothing is stored" note), or stop seeding after a forget.
+  Recommend the first; it is what a fresh install looks like.
+- **Open: export never leaves the app sandbox.** It writes to `LocalFolder`, which on
+  Android only `run-as` can read. "Export" that the user cannot reach is a share-sheet
+  job (`Intent.ActionSend` with a `FileProvider` URI) — Android UI work, not started.
+
+## Not compiled in the cloud session
+
+Three files were changed on 2026-10-02 without a toolchain that can compile them —
+the cloud container has no Android workload and no Uno desktop build. Each was
+syntax-checked with Roslyn and nothing more:
+
+- `Platforms/Android/ArCoreCaptureAdapter.cs` — the GL-context rewrite above.
+- `Presentation/SpatialRoomViewModel.cs` — three `CanLinkPlace` sites and the Link
+  command guard now go through `PlaceLinking.CanLink`; the private
+  `SampleGarageFactoryId` copy is gone.
+- `Infrastructure/PrivacyService.cs` — the export cleanup.
+
+Build all four TFMs before anything else; the pure layers under them are covered
+(131 tests pass, the 10 `HitTestingTests` failures are Linux lacking `libSkiaSharp`).
 
 ## The input harness is unreliable again
 
@@ -218,7 +250,7 @@ and **half done on the Pixel** — the app is deployed and the sensor half is un
 ## Last verified state
 
 - **Build:** all four TFMs, **0 warnings / 0 errors**. Uno.Sdk 6.6.42 / .NET 10.0.302.
-- **Tests:** `tests/Aware.Tests`, **126 passing**. `FieldMeasuredMatchTests` is built
+- **Tests:** `tests/Aware.Tests`, **141 total; 131 pass on Linux, all expected on Windows**. `FieldMeasuredMatchTests` is built
   from readings actually taken on the device and pins both directions: another room
   must not match the kitchen, and the kitchen must still match itself across a 29 µT
   reorientation and from a step across the room.
@@ -272,11 +304,13 @@ first, and the canvas lifecycle across page swaps has to be solved before that.
    "workbench", so a scan produces shell geometry and no object candidates. The
    correction flow already lets a user name things; whether that is the shipped
    answer or a classifier follows is a product decision, not a bug.
-5. **Decide: does the sample garage stay linkable?** SPEC unresolved question #1 said
-   decide before step 7 and step 7 shipped without it. Currently moot on this device —
-   the data wipe re-seeded the garage unlinked, and the locator now logs
-   `Your Garage is not linked to a place` — but the affordance is still there and will
-   recreate the incoherence the moment someone taps it.
+5. **Decided: the sample garage is not linkable.** SPEC unresolved question #1,
+   answered as SPEC recommended. `PlaceLinking.CanLink` is the one rule, used by the
+   recognition service and the view model (load, room switch, and inside the Link
+   command as a guard). With live sensors the sample now settles on
+   `98% confident · stable room model` instead of inviting a link. Pinned by
+   `PlaceLinkingTests`. The view-model side is not compiled here — see "Not compiled
+   in the cloud session" below.
 6. **Revisit the 0.6 bar once there are three or more real rooms.** Untunable on two.
    The earlier ~0.83 cross-room figure is obsolete: it came from the old matcher.
 7. Portrait framing decision (unchanged from earlier handoffs).
