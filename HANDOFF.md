@@ -1,7 +1,7 @@
 # HANDOFF — Aware recognition-only rooms (SPEC complete, walk test outstanding)
-Updated: 2026-08-07 22:15
+Updated: 2026-10-02
 
-## Capture: pipeline verified, ARCore adapter not
+## Capture: pipeline verified, ARCore adapter rewritten and not yet compiled
 
 **The app can now observe real geometry.** `ISpatialCaptureAdapter.CaptureAsync`
 had been declared since the first build and never once called; there is now an
@@ -50,14 +50,37 @@ everything downstream of step 3 is already proven on desktop:
 6. `adb shell run-as com.companyname.aware cat files/spatial/<room>.json` — the
    `shell` array should have real extents and the room should keep its original id.
 
-**The likeliest failure is the GL texture.** ARCore requires a camera texture
-before `Session.Update()` returns frames, and `EnsureCameraTexture` calls
-`GLES20.GlGenTextures` on whatever thread the scan runs on. If there is no current
-EGL context on that thread the texture id is 0 and every frame is dropped —
-symptom is a scan that runs its full 45 s and observes nothing. If that happens,
-the fix is to create the texture on a thread with a live GL context, or host an
-offscreen `GLSurfaceView`. This is the one part of the design that was reasoned
-about rather than measured.
+**The GL texture failure is addressed, uncompiled.** The previous adapter called
+`GLES20.GlGenTextures` after an `await`, which resumes on the UI thread, where Uno's
+Skia renderer holds no GL context — texture id 0, every frame dropped, a 45 s scan
+that observes nothing. Each scan now runs on its own long-running thread that
+creates a 1×1 pbuffer EGL context, creates the external texture inside it, and
+keeps `Resume`, `Update` and `Pause` on that thread, handing observations back
+over a `Channel`. **This was written in a cloud session with no Android SDK and
+has never been compiled.** First thing on the next device session:
+
+```powershell
+dotnet build Aware/Aware.csproj -f net10.0-android -c Debug
+```
+
+Then scan. The failure modes now look different from before:
+
+- `The ARCore scan failed.` with *No offscreen GL context could be created* →
+  EGL refused a pbuffer config on this GPU. Try dropping `EglAlphaSize` from the
+  config attributes, or use the renderer's config via `EglGetConfigs`.
+- *The camera texture could not be created (GL error 0x502)* → the context was
+  created but not made current; `0x502` is `GL_INVALID_OPERATION`.
+- Scan runs 45 s and `Scanning this room · 0 surfaces` the whole time, no error
+  → the context is fine and ARCore is simply not finding planes (light, texture,
+  moving too fast). That is the only remaining "observes nothing" case.
+- The scan stops at once with `The scan stopped early` → `Session.Resume()`
+  threw; the exception is in logcat under `The ARCore scan failed.`
+
+One assumption remains unmeasured: that `Session.Update()` is happy with the
+session having been *created* on the UI thread (in `GetCapabilitiesAsync`) and
+*driven* on the scan thread. Not checked against the ARCore docs (blocked from
+the cloud session). If `Resume` or `Update` complains about the calling thread,
+move `EnsureSession` onto the scan thread too.
 
 ## Privacy controls: built, pause verified, the rest not click-verified
 
