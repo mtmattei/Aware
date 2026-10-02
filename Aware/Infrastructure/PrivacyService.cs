@@ -17,17 +17,24 @@ public sealed class PrivacyService : IPrivacyService
         RetainImagery: false,
         AcousticSensingEnabled: true);
 
+    /// <summary>
+    /// Exports land beside the settings file rather than under the room store,
+    /// so a room deleted from the list does not take its export with it. The
+    /// pattern is what lets "forget everything" find them again.
+    /// </summary>
+    private const string ExportPattern = "*-export.json";
+
     private readonly IRoomRepository _rooms;
     private readonly ILogger<PrivacyService> _log;
+    private readonly string _folder;
     private readonly string _path;
 
     public PrivacyService(IRoomRepository rooms, ILogger<PrivacyService> log)
     {
         _rooms = rooms;
         _log = log;
-        _path = Path.Combine(
-            Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-            "privacy.json");
+        _folder = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
+        _path = Path.Combine(_folder, "privacy.json");
     }
 
     public PrivacySettings Current { get; private set; } = Defaults;
@@ -62,6 +69,11 @@ public sealed class PrivacyService : IPrivacyService
         await _rooms.DeleteAllAsync(ct);
         Current = Defaults;
         if (File.Exists(_path)) File.Delete(_path);
+
+        // An export is a full copy of a room, so "forget everything" that left
+        // them behind would have erased the originals and kept the copies.
+        foreach (var export in Directory.EnumerateFiles(_folder, ExportPattern))
+            File.Delete(export);
     }
 
     public async Task<string> ExportModelAsync(RoomId id, CancellationToken ct)
@@ -69,9 +81,7 @@ public sealed class PrivacyService : IPrivacyService
         var room = await _rooms.GetRoomAsync(id, ct)
             ?? throw new InvalidOperationException($"Room {id.Value} is not stored on this device.");
 
-        var target = Path.Combine(
-            Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-            $"{id.Value}-export.json");
+        var target = Path.Combine(_folder, $"{id.Value}-export.json");
 
         await File.WriteAllTextAsync(
             target,
